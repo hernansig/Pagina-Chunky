@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHUNKY SNKRS — STREETWEAR UY</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --black:    #080808;
+      --carbon:   #101010;
+      --dark:     #161616;
+      --dark2:    #1e1e1e;
+      --red:      #cc0000;
+      --deep-red: #8b0000;
+      --bordo:    #5a0e0e;
+      --bone:     #e8e0d0;
+      --white:    #f2f2f2;
+      --muted:    #555;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--black);
+      color: var(--bone);
+      font-family: 'Oswald', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      cursor: crosshair;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px
+      );
+      pointer-events: none;
+      z-index: 998;
+    }
+    .grain {
+      position: fixed;
+      inset: 0;
+      z-index: 997;
+      pointer-events: none;
+      opacity: 0.055;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+      animation: grain-shift 0.25s steps(1) infinite;
+    }
+    @keyframes grain-shift {
+      0%  { transform: translate(0,0); }
+      14% { transform: translate(-2%,-3%); }
+      28% { transform: translate(3%,1%); }
+      42% { transform: translate(-1%,4%); }
+      57% { transform: translate(4%,-2%); }
+      71% { transform: translate(-3%,2%); }
+      85% { transform: translate(2%,3%); }
+      100%{ transform: translate(-4%,-1%); }
+    }
+    canvas#bg { position: fixed; inset: 0; z-index: 0; }
+    .wrapper  { position: relative; z-index: 2; }
+
+    /* TICKER */
+    .ticker-wrap {
+      background: var(--deep-red);
+      overflow: hidden;
+      border-bottom: 1px solid var(--bordo);
+      height: 30px;
+      display: flex;
+      align-items: center;
+    }
+    .ticker-track {
+      display: flex;
+      white-space: nowrap;
+      animation: ticker 30s linear infinite;
+    }
+    .ticker-item {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 12px;
+      letter-spacing: 5px;
+      color: rgba(232,224,208,0.85);
+      padding: 0 44px;
+    }
+    .ticker-item::before {
+      content: '//';
+      margin-right: 44px;
+      color: rgba(255,255,255,0.25);
+    }
+    @keyframes ticker {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* HEADER */
+    header {
+      text-align: center;
+      padding: 60px 20px 50px;
+      border-bottom: 1px solid var(--bordo);
+      background:
+        linear-gradient(180deg, rgba(139,0,0,0.14) 0%, transparent 75%),
+        linear-gradient(0deg,   rgba(0,0,0,0.5)    0%, transparent 55%);
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      left: 0; right: 0; top: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, var(--red) 50%, transparent 100%);
+      animation: scan 4s ease-in-out infinite;
+    }
+    @keyframes scan {
+      0%, 100% { top: 0%; opacity: 0; }
+      8%        { opacity: 0.9; }
+      92%       { opacity: 0.2; }
+      50%       { top: 100%; }
+    }
+    .deco-line {
+      position: absolute;
+      top: 50%;
+      width: clamp(60px, 10vw, 130px);
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--deep-red));
+      transform: translateY(-50%);
+    }
+    .deco-line.left  { left: 4%; }
+    .deco-line.right { right: 4%; transform: translateY(-50%) scaleX(-1); }
+
+    .logo-wrap { display: inline-block; position: relative; }
+    .logo {
+      font-family: 'Permanent Marker', cursive;
+      font-size: clamp(52px, 13vw, 128px);
+      color: var(--white);
+      letter-spacing: -3px;
+      line-height: 0.88;
+      text-transform: uppercase;
+      position: relative;
+      z-index: 2;
+      animation: glitch-base 5s infinite;
+    }
+    .logo-ghost {
+      position: absolute;
+      inset: 0;
+      font-family: 'Permanent Marker', cursive;
+      font-size: clamp(52px, 13vw, 128px);
+      letter-spacing: -3px;
+      line-height: 0.88;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+    .logo-ghost.r {
+      color: var(--red);
+      clip-path: polygon(0 18%, 100% 18%, 100% 38%, 0 38%);
+      animation: glitch-r 5s infinite;
+    }
+    .logo-ghost.b {
+      color: #1a6b8b;
+      clip-path: polygon(0 62%, 100% 62%, 100% 82%, 0 82%);
+      animation: glitch-b 5s infinite;
+    }
+    @keyframes glitch-base {
+      0%,87%,100% { transform: none; }
+      88% { transform: translate(-3px, 1px) skewX(2deg); }
+      90% { transform: translate( 3px,-1px) skewX(-2deg); }
+      92% { transform: translate(-2px, 2px); }
+      94% { transform: translate( 2px,-2px); }
+      96% { transform: none; }
+    }
+    @keyframes glitch-r {
+      0%,87%,100% { transform: none; opacity: 0; }
+      88% { transform: translate(-4px,0); opacity: 0.9; }
+      90% { transform: translate( 4px,0); opacity: 0.7; }
+      92% { transform: translate(-2px,1px); opacity: 0.8; }
+      94% { opacity: 0; }
+    }
+    @keyframes glitch-b {
+      0%,88%,100% { transform: none; opacity: 0; }
+      89% { transform: translate( 4px,0); opacity: 0.75; }
+      91% { transform: translate(-4px,0); opacity: 0.55; }
+      93% { transform: translate( 2px,-1px); opacity: 0.65; }
+      95% { opacity: 0; }
+    }
+    .tagline {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(13px, 2.8vw, 20px);
+      color: var(--red);
+      letter-spacing: 10px;
+      text-transform: uppercase;
+      margin-top: 16px;
+    }
+    .header-sub {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      margin-top: 10px;
+    }
+
+    /* CATALOG */
+    .catalog {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 14px 80px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 52px 0 36px;
+    }
+    .section-header::before { content:''; flex:1; height:1px; background: linear-gradient(90deg, transparent, var(--bordo)); }
+    .section-header::after  { content:''; flex:1; height:1px; background: linear-gradient(90deg, var(--bordo), transparent); }
+    .section-label {
+      font-family: 'Permanent Marker', cursive;
+      font-size: clamp(20px, 4.5vw, 36px);
+      color: var(--bone);
+      white-space: nowrap;
+    }
+    .section-label span { color: var(--red); }
+
+    /* GRID */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 860px) {
+      .grid { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    }
+
+    /* CARD */
+    .card {
+      background: var(--carbon);
+      border: 1px solid #1c1c1c;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.18s;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--bordo);
+      z-index: 3;
+      transition: background 0.2s;
+    }
+    .card::after {
+      content: '';
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 18px; height: 18px;
+      border-bottom: 2px solid var(--bordo);
+      border-right:  2px solid var(--bordo);
+      z-index: 3;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: var(--red); transform: translateY(-4px); }
+    .card:hover::before { background: var(--red); }
+    .card:hover::after  { border-color: var(--red); }
+
+    .card-img-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      overflow: hidden;
+      background: var(--dark);
+    }
+    .card-img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: grayscale(15%) contrast(108%) brightness(0.94);
+      transition: filter 0.25s, transform 0.25s;
+    }
+    .card:hover .card-img {
+      filter: grayscale(0%) contrast(112%) brightness(1);
+      transform: scale(1.04);
+    }
+    .card-placeholder {
+      width: 100%; height: 100%;
+      background: var(--dark);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+    }
+    .card-placeholder::before {
+      content: '';
+      position: absolute;
+      inset: 10px;
+      border: 1px dashed #252525;
+    }
+    .ph-tag {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--bordo);
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .ph-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(13px, 2.2vw, 17px);
+      color: #383838;
+      text-align: center;
+      line-height: 1.2;
+      position: relative;
+    }
+    .card-body { padding: 12px 14px 14px; }
+    .card-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(15px, 2.4vw, 21px);
+      color: var(--white);
+      letter-spacing: 1px;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .card-meta {
+      display: flex;
+      align-items: center;
+      margin-top: 8px;
+      gap: 8px;
+    }
+    .card-size {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--muted);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: 1px solid #272727;
+      padding: 2px 7px;
+      background: var(--dark2);
+      flex-shrink: 0;
+    }
+    .card-price {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(18px, 3vw, 25px);
+      color: var(--red);
+      letter-spacing: 1px;
+      margin-left: auto;
+    }
+    .btn-consultar {
+      display: block;
+      width: 100%;
+      padding: 9px 0;
+      margin-top: 12px;
+      background: var(--bordo);
+      color: var(--bone);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      letter-spacing: 5px;
+      text-align: center;
+      text-decoration: none;
+      text-transform: uppercase;
+      border: 1px solid var(--deep-red);
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .btn-consultar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--red);
+      transform: translateX(-101%);
+      transition: transform 0.22s ease;
+      z-index: 0;
+    }
+    .btn-consultar:hover::before { transform: translateX(0); }
+    .btn-consultar span { position: relative; z-index: 1; }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--bordo);
+      padding: 50px 20px 40px;
+      text-align: center;
+      background: linear-gradient(0deg, rgba(139,0,0,0.08) 0%, transparent 100%);
+    }
+    .footer-logo {
+      font-family: 'Permanent Marker', cursive;
+      font-size: 34px;
+      color: var(--white);
+      letter-spacing: -1px;
+    }
+    .footer-ig {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px;
+      color: var(--red);
+      letter-spacing: 5px;
+      margin-top: 10px;
+    }
+    .footer-ig a { color: inherit; text-decoration: none; transition: color 0.15s; }
+    .footer-ig a:hover { color: var(--bone); }
+    .footer-copy {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      color: #333;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: 24px;
+    }
+
+    /* ── SVG CRACKS ── */
+    .cracks-svg {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .cg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    @keyframes crack-pulse {
+      0%, 100% { opacity: 0.40; }
+      50%       { opacity: 0.88; }
+    }
+    .cg1 { animation: crack-pulse 4.2s ease-in-out infinite 0.0s; }
+    .cg2 { animation: crack-pulse 5.8s ease-in-out infinite 1.3s; }
+    .cg3 { animation: crack-pulse 3.7s ease-in-out infinite 2.1s; }
+    .cg4 { animation: crack-pulse 6.1s ease-in-out infinite 0.7s; }
+    .cg5 { animation: crack-pulse 4.9s ease-in-out infinite 3.2s; }
+
+    /* ── ENCARGOS ── */
+    .encargos {
+      border-top: 1px solid var(--bordo);
+      border-bottom: 1px solid var(--bordo);
+      background: linear-gradient(180deg, rgba(139,0,0,0.07) 0%, transparent 40%, rgba(139,0,0,0.07) 100%);
+      padding: 0 0 70px;
+    }
+    .form-wrap { max-width: 640px; margin: 0 auto; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 500px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-full { grid-column: 1 / -1; }
+    .form-field { display: flex; flex-direction: column; gap: 6px; }
+    .form-label {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .form-input,
+    .form-textarea {
+      background: var(--dark);
+      border: 1px solid #272727;
+      border-top: 1px solid var(--bordo);
+      color: var(--bone);
+      font-family: 'Oswald', sans-serif;
+      font-size: 15px;
+      font-weight: 400;
+      padding: 10px 12px;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus,
+    .form-textarea:focus { border-color: var(--red); }
+    .form-input::placeholder,
+    .form-textarea::placeholder { color: var(--muted); opacity: 0.45; }
+    .form-textarea { resize: vertical; min-height: 110px; }
+    .btn-submit {
+      display: block;
+      width: 100%;
+      padding: 13px 0;
+      margin-top: 16px;
+      background: var(--bordo);
+      color: var(--bone);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 17px;
+      letter-spacing: 6px;
+      text-align: center;
+      border: 1px solid var(--deep-red);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: color 0.15s;
+    }
+    .btn-submit::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--red);
+      transform: translateX(-101%);
+      transition: transform 0.22s ease;
+      z-index: 0;
+    }
+    .btn-submit:hover::before { transform: translateX(0); }
+    .btn-submit span { position: relative; z-index: 1; }
+    .form-note {
+      font-family: 'Oswald', sans-serif;
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-align: center;
+      margin-top: 10px;
+      opacity: 0.55;
+    }
+    .field-error {
+      font-family: 'Oswald', sans-serif;
+      font-size: 10px;
+      color: var(--red);
+      letter-spacing: 1px;
+      margin-top: 4px;
+      display: none;
+    }
+    .form-input.invalid,
+    .form-textarea.invalid { border-color: var(--red); }
+  </style>
+</head>
+<body>
+
+<div class="grain"></div>
+<canvas id="bg"></canvas>
+
+<svg class="cracks-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <defs>
+    <filter id="cglow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g class="cg cg1" filter="url(#cglow)" stroke="#cc2222">
+    <path stroke-width="1.6" d="M 0,45 L 62,88 L 92,168 L 78,248 L 125,318 L 108,402"/>
+    <path stroke-width="1.0" d="M 62,88 L 22,155 L 5,235"/>
+    <path stroke-width="1.0" d="M 92,168 L 152,192 L 198,262 L 188,330"/>
+    <path stroke-width="0.6" d="M 152,192 L 178,162 L 215,140"/>
+    <path stroke-width="0.6" d="M 125,318 L 162,335 L 178,405"/>
+    <path stroke-width="0.4" d="M 22,155 L 8,180 L 15,210"/>
+    <path stroke-width="0.4" d="M 198,262 L 228,248 L 252,268"/>
+  </g>
+  <g class="cg cg2" filter="url(#cglow)" stroke="#cc2222">
+    <path stroke-width="1.6" d="M 1440,35 L 1378,82 L 1335,158 L 1358,238 L 1298,308"/>
+    <path stroke-width="1.0" d="M 1378,82 L 1422,148 L 1440,222"/>
+    <path stroke-width="1.0" d="M 1335,158 L 1272,178 L 1238,248 L 1222,318"/>
+    <path stroke-width="0.6" d="M 1272,178 L 1258,142 L 1228,112"/>
+    <path stroke-width="0.6" d="M 1298,308 L 1248,325 L 1235,392"/>
+    <path stroke-width="0.4" d="M 1422,148 L 1435,178 L 1428,210"/>
+    <path stroke-width="0.4" d="M 1238,248 L 1208,242 L 1188,268"/>
+  </g>
+  <g class="cg cg3" filter="url(#cglow)" stroke="#cc2222">
+    <path stroke-width="1.4" d="M 720,450 L 658,382 L 602,308 L 562,232"/>
+    <path stroke-width="1.4" d="M 720,450 L 782,378 L 838,302 L 875,225"/>
+    <path stroke-width="1.2" d="M 720,450 L 738,532 L 720,615 L 748,695"/>
+    <path stroke-width="1.1" d="M 720,450 L 648,498 L 595,568"/>
+    <path stroke-width="1.1" d="M 720,450 L 792,502 L 845,572"/>
+    <path stroke-width="0.7" d="M 658,382 L 598,398 L 558,465"/>
+    <path stroke-width="0.7" d="M 782,378 L 842,398 L 882,462"/>
+    <path stroke-width="0.5" d="M 602,308 L 562,278 L 528,238"/>
+    <path stroke-width="0.5" d="M 838,302 L 878,278 L 912,238"/>
+    <path stroke-width="0.4" d="M 595,568 L 570,598 L 582,635"/>
+    <path stroke-width="0.4" d="M 845,572 L 870,602 L 858,638"/>
+  </g>
+  <g class="cg cg4" filter="url(#cglow)" stroke="#cc2222">
+    <path stroke-width="1.6" d="M 0,855 L 68,805 L 122,745 L 162,678 L 198,608"/>
+    <path stroke-width="1.0" d="M 68,805 L 25,758 L 0,705"/>
+    <path stroke-width="1.0" d="M 122,745 L 175,768 L 215,728 L 242,665"/>
+    <path stroke-width="0.6" d="M 162,678 L 125,658 L 98,618"/>
+    <path stroke-width="0.4" d="M 215,728 L 248,748 L 265,722"/>
+    <path stroke-width="0.4" d="M 25,758 L 5,778 L 12,808"/>
+  </g>
+  <g class="cg cg5" filter="url(#cglow)" stroke="#cc2222">
+    <path stroke-width="1.6" d="M 1440,395 L 1378,422 L 1322,382 L 1265,418 L 1202,388"/>
+    <path stroke-width="1.0" d="M 1378,422 L 1398,478 L 1382,548 L 1402,615"/>
+    <path stroke-width="1.0" d="M 1322,382 L 1298,325 L 1262,278"/>
+    <path stroke-width="0.7" d="M 1265,418 L 1242,478 L 1258,542"/>
+    <path stroke-width="0.6" d="M 1202,388 L 1152,408 L 1112,458"/>
+    <path stroke-width="0.4" d="M 1298,325 L 1318,298 L 1308,272"/>
+    <path stroke-width="0.4" d="M 1382,548 L 1362,572 L 1375,602"/>
+  </g>
+</svg>
+
+<div class="wrapper">
+
+  <div class="ticker-wrap" aria-hidden="true">
+    <div class="ticker-track">
+      <span class="ticker-item">CHUNKY SNKRS</span>
+      <span class="ticker-item">STREETWEAR MONTEVIDEO</span>
+      <span class="ticker-item">CALIDAD REAL</span>
+      <span class="ticker-item">CONSULTA VIA INSTAGRAM</span>
+      <span class="ticker-item">STOCK LIMITADO</span>
+      <span class="ticker-item">NO HAY OTRO LUGAR</span>
+      <span class="ticker-item">CHUNKY SNKRS</span>
+      <span class="ticker-item">STREETWEAR MONTEVIDEO</span>
+      <span class="ticker-item">CALIDAD REAL</span>
+      <span class="ticker-item">CONSULTA VIA INSTAGRAM</span>
+      <span class="ticker-item">STOCK LIMITADO</span>
+      <span class="ticker-item">NO HAY OTRO LUGAR</span>
+    </div>
+  </div>
+
+  <header>
+    <div class="deco-line left"></div>
+    <div class="deco-line right"></div>
+    <div class="logo-wrap">
+      <span class="logo-ghost r" aria-hidden="true">CHUNKY SNKRS</span>
+      <span class="logo-ghost b" aria-hidden="true">CHUNKY SNKRS</span>
+      <span class="logo">CHUNKY SNKRS</span>
+    </div>
+    <div class="tagline">NO HAY OTRO LUGAR</div>
+    <div class="header-sub">Uruguay — Catálogo activo 2026</div>
+  </header>
+
+  <main class="catalog">
+    <div class="section-header">
+      <span class="section-label">CATÁLOGO <span>ACTUAL</span></span>
+    </div>
+
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1sLUafJ6r1uThu-tbpfodkf8Hm1qFqnB1" alt="Reebok BULC verde/marrón" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Reebok BULC verde/marrón</div>
+          <div class="card-meta"><span class="card-size">T 40.5</span><span class="card-price">$5.990</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1rjYZd9n5HxOiRotOMx_8w5_EQwK4un4x" alt="Reebok BULC crema" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Reebok BULC crema</div>
+          <div class="card-meta"><span class="card-size">T 44</span><span class="card-price">$4.990</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1fc_DzNkYBayH4PJivEoEDVMvCC6jRU14" alt="Dunk SB 90s Back Pack" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Dunk SB 90s Back Pack</div>
+          <div class="card-meta"><span class="card-size">T 36</span><span class="card-price">$6.990</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/182dZqG_fIId3vUTkl3WY1QeN_O9vTDE4" alt="Dunk SB Court Purple" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Dunk SB Court Purple</div>
+          <div class="card-meta"><span class="card-size">T 46</span><span class="card-price">$6.990</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1icIvca4-PoRGP4l-p4K48pLE68a9cwm7" alt="Timberland Pro" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Timberland Pro</div>
+          <div class="card-meta"><span class="card-size">T 44.5</span><span class="card-price">$11.000</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/18KJwTestG2H0Tea5cEJbCJyDwVNQLprw" alt="Visera Sullen x NE azul" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Visera Sullen x NE azul</div>
+          <div class="card-meta"><span class="card-size">—</span><span class="card-price">$3.600</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1SP4cG8_jkn584OclVCDKujNNcBCyPxis" alt="Visera Sullen x NE marrón" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Visera Sullen x NE marrón</div>
+          <div class="card-meta"><span class="card-size">—</span><span class="card-price">$4.000</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1lQDlDalmZEasGseaHsaBv86GukyzYN1E" alt="Visera Sullen x NE roja" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Visera Sullen x NE roja</div>
+          <div class="card-meta"><span class="card-size">—</span><span class="card-price">$3.500</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <!-- ╔══════════════════════════════════════════════════════════════╗
+           FOTO PENDIENTE #4 — Remera Nike SB
+           Reemplazar el div.card-placeholder con:
+           <img class="card-img" src="URL" alt="Remera Nike SB" loading="lazy">
+           ╚══════════════════════════════════════════════════════════════╝ -->
+      <div class="card">
+        <div class="card-img-wrap">
+          <div class="card-placeholder">
+            <div class="ph-tag">Foto próximamente</div>
+            <div class="ph-name">Remera Nike SB</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-name">Remera Nike SB</div>
+          <div class="card-meta"><span class="card-size">T S</span><span class="card-price">$1.290</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1BWF_J1__t2yEYn6EqiwmoEACnNACnRk5" alt="Remera Jordan x Nina" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Remera Jordan x Nina</div>
+          <div class="card-meta"><span class="card-size">T L</span><span class="card-price">$4.590</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1COoZTzA_tCknAvKjs0zALPKmJLMCGemG" alt="Remera Jordan" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Remera Jordan</div>
+          <div class="card-meta"><span class="card-size">T M</span><span class="card-price">$3.390</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1USoC54k-Fh_K0SU8RM_eyNAKWXlOkGa8" alt="DC Court Graffik T39" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">DC Court Graffik</div>
+          <div class="card-meta"><span class="card-size">T 39</span><span class="card-price">$5.800</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1FfC7j343JbG1Xctmasil_UMCUdUydgcr" alt="DC Court Graffik T41/42" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">DC Court Graffik</div>
+          <div class="card-meta"><span class="card-size">T 41/42</span><span class="card-price">$5.800</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <!-- ╔══════════════════════════════════════════════════════════════╗
+           FOTO PENDIENTE #5 — Short Jordan
+           Reemplazar el div.card-placeholder con:
+           <img class="card-img" src="URL" alt="Short Jordan" loading="lazy">
+           ╚══════════════════════════════════════════════════════════════╝ -->
+      <div class="card">
+        <div class="card-img-wrap">
+          <div class="card-placeholder">
+            <div class="ph-tag">Foto próximamente</div>
+            <div class="ph-name">Short Jordan</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-name">Short Jordan</div>
+          <div class="card-meta"><span class="card-size">T L</span><span class="card-price">$4.000</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1-pIhB_Jdjg6oE5ZMQOPXQuiWwAC3eQ9Q" alt="Remera Supreme" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Remera Supreme</div>
+          <div class="card-meta"><span class="card-size">T XL</span><span class="card-price">$4.500</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1EI1SUkK19kyJSMk6u1A6pabbzVK59KbA" alt="Buzo Stussy" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">Buzo Stussy</div>
+          <div class="card-meta"><span class="card-size">T XL</span><span class="card-price">$6.000</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-img-wrap">
+          <img class="card-img" src="https://lh3.googleusercontent.com/d/1bVwsd2b9YX-zPrQpw9Ijy7PmQCq1hnf4" alt="New Balance" loading="lazy">
+        </div>
+        <div class="card-body">
+          <div class="card-name">New Balance</div>
+          <div class="card-meta"><span class="card-size">T 44.5</span><span class="card-price">$6.900</span></div>
+          <a class="btn-consultar" href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener"><span>CONSULTAR</span></a>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <section class="encargos">
+    <div class="catalog">
+      <div class="section-header">
+        <span class="section-label">PEDIDOS POR <span>ENCARGO</span></span>
+      </div>
+      <div class="form-wrap">
+        <!--
+          WEB3FORMS — ACTIVACIÓN RÁPIDA (gratis):
+          1. Entrar a https://web3forms.com
+          2. Poner chunkysnkrs.uy@gmail.com y hacer click en "Get your Access Key"
+          3. Reemplazar "32f8b899-752f-40de-bb62-18ba92d7a0d9" en el input oculto de abajo con la clave recibida
+          Listo — los encargos llegarán directo a tu Gmail sin que el cliente haga nada extra.
+        -->
+        <form action="https://api.web3forms.com/submit" method="POST">
+          <input type="hidden" name="access_key" value="32f8b899-752f-40de-bb62-18ba92d7a0d9">
+          <input type="hidden" name="subject"    value="Nuevo Encargo — Chunky Snkrs">
+          <input type="hidden" name="from_name"  value="Chunky Snkrs Web">
+          <input type="hidden" name="redirect"   id="form-redirect" value="">
+          <input type="checkbox" name="botcheck" style="display:none" tabindex="-1" autocomplete="off">
+          <div class="form-grid">
+            <div class="form-field">
+              <label class="form-label" for="enc-nombre">Nombre</label>
+              <input class="form-input" type="text" id="enc-nombre" name="name" placeholder="Tu nombre" required>
+              <span class="field-error" id="err-nombre">Mínimo 2 letras, sin números.</span>
+            </div>
+            <div class="form-field">
+              <label class="form-label" for="enc-telefono">Teléfono</label>
+              <input class="form-input" type="tel" id="enc-telefono" name="telefono" placeholder="+598 9X XXX XXX" required>
+              <span class="field-error" id="err-telefono">Solo dígitos, 8 o 9 caracteres.</span>
+            </div>
+            <div class="form-field form-full">
+              <label class="form-label" for="enc-gmail">Gmail</label>
+              <input class="form-input" type="email" id="enc-gmail" name="email" placeholder="tu@gmail.com" required>
+              <span class="field-error" id="err-email">Email inválido.</span>
+            </div>
+            <div class="form-field form-full">
+              <label class="form-label" for="enc-desc">Descripción del pedido</label>
+              <textarea class="form-textarea" id="enc-desc" name="message" placeholder="Describí lo que buscás: marca, modelo, talle, color..." required></textarea>
+              <span class="field-error" id="err-desc">Mínimo 10 caracteres, máximo 500.</span>
+            </div>
+          </div>
+          <button class="btn-submit" type="submit"><span>ENVIAR ENCARGO</span></button>
+          <div class="form-note">El pedido se envía directo a chunkysnkrs.uy@gmail.com</div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-logo">Chunky Snkrs</div>
+    <div class="footer-ig">
+      <a href="https://ig.me/m/chunkysnkrs" target="_blank" rel="noopener">@chunkysnkrs.uy</a>
+    </div>
+    <div class="footer-copy">Streetwear Uruguay — Stock limitado — Consultas por Instagram</div>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('bg');
+  const ctx    = canvas.getContext('2d');
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  /* ── PARTICLES ── */
+  const N = 85;
+  const pts = [];
+  function mkPt() {
+    return {
+      x:  Math.random() * canvas.width,
+      y:  Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: (Math.random() - 0.5) * 0.5,
+      r:  Math.random() * 1.8 + 0.4,
+      op: Math.random() * 0.42 + 0.08,
+      ph: Math.random() * Math.PI * 2,
+      ps: 0.015 + Math.random() * 0.025,
+      col: Math.random() > 0.5 ? '#8b0000' : '#cc0000',
+    };
+  }
+  for (let i = 0; i < N; i++) pts.push(mkPt());
+
+  function draw() {
+    const t = performance.now() * 0.001;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const g = ctx.createRadialGradient(
+      canvas.width * 0.5, canvas.height * 0.38, 0,
+      canvas.width * 0.5, canvas.height * 0.5,  canvas.height * 0.92
+    );
+    g.addColorStop(0,    '#0f0404');
+    g.addColorStop(0.55, '#090909');
+    g.addColorStop(1,    '#030303');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    /* particle connections */
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y);
+        if (d < 125) {
+          ctx.save();
+          ctx.globalAlpha = (1 - d / 125) * 0.065;
+          ctx.strokeStyle = '#8b0000';
+          ctx.lineWidth   = 0.4;
+          ctx.beginPath();
+          ctx.moveTo(pts[i].x, pts[i].y);
+          ctx.lineTo(pts[j].x, pts[j].y);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+
+    /* particles */
+    pts.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.ph += p.ps;
+      if (p.x < -6 || p.x > canvas.width + 6 || p.y < -6 || p.y > canvas.height + 6) {
+        const n = mkPt();
+        n.x = Math.random() * canvas.width;
+        n.y = Math.random() * canvas.height;
+        Object.assign(p, n);
+      }
+      const a = p.op * (0.6 + 0.4 * Math.sin(p.ph));
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle   = p.col;
+      ctx.shadowBlur  = 7;
+      ctx.shadowColor = p.col;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+}());
+
+/* set redirect back to this page after form submit */
+var fr = document.getElementById('form-redirect');
+if (fr) fr.value = window.location.href;
+
+/* ── VALIDACIÓN FORMULARIO ── */
+(function () {
+  const form    = document.querySelector('form[action*="web3forms"]');
+  if (!form) return;
+
+  function setError(inputId, errId, invalid) {
+    const input = document.getElementById(inputId);
+    const err   = document.getElementById(errId);
+    if (!input || !err) return;
+    input.classList.toggle('invalid', invalid);
+    err.style.display = invalid ? 'block' : 'none';
+  }
+
+  function validateNombre(val) {
+    return val.trim().length >= 2 && !/\d/.test(val);
+  }
+  function validateTelefono(val) {
+    const digits = val.replace(/\D/g, '');
+    return digits.length >= 8 && digits.length <= 9;
+  }
+  function validateEmail(val) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(val);
+  }
+  function validateDesc(val) {
+    return val.trim().length >= 10 && val.trim().length <= 500;
+  }
+
+  /* validación en tiempo real al salir del campo */
+  document.getElementById('enc-nombre')  .addEventListener('blur', function () { setError('enc-nombre',   'err-nombre',   !validateNombre(this.value)); });
+  document.getElementById('enc-telefono').addEventListener('blur', function () { setError('enc-telefono', 'err-telefono', !validateTelefono(this.value)); });
+  document.getElementById('enc-gmail')   .addEventListener('blur', function () { setError('enc-gmail',    'err-email',    !validateEmail(this.value)); });
+  document.getElementById('enc-desc')    .addEventListener('blur', function () { setError('enc-desc',     'err-desc',     !validateDesc(this.value)); });
+
+  /* bloquear envío si hay errores */
+  form.addEventListener('submit', function (e) {
+    const nombre  = document.getElementById('enc-nombre').value;
+    const telefono= document.getElementById('enc-telefono').value;
+    const email   = document.getElementById('enc-gmail').value;
+    const desc    = document.getElementById('enc-desc').value;
+
+    const n = !validateNombre(nombre);
+    const t = !validateTelefono(telefono);
+    const em= !validateEmail(email);
+    const d = !validateDesc(desc);
+
+    setError('enc-nombre',   'err-nombre',   n);
+    setError('enc-telefono', 'err-telefono', t);
+    setError('enc-gmail',    'err-email',    em);
+    setError('enc-desc',     'err-desc',     d);
+
+    if (n || t || em || d) e.preventDefault();
+  });
+}());
+</script>
+</body>
+</html>
