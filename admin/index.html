@@ -156,13 +156,20 @@ async function vProductos() {
       <div><button class="btn mini" id="pf-btn"><span>Agregar</span></button></div>
     </div>
     <table><thead><tr><th>Producto</th><th>Precio</th><th>Talle</th><th>Disp.</th><th>Activo</th><th></th></tr></thead>
-    <tbody>${productos.map(p => `<tr data-id="${p.id}">
-      <td><input class="e-nombre" value="${esc(p.nombre)}" style="width:100%"></td>
+    <tbody>${productos.map(p => `<tr data-id="${p.id}" data-orden="${p.orden || 0}">
+      <td>
+        <input class="e-nombre" value="${esc(p.nombre)}" style="width:100%">
+        <input class="e-foto" value="${esc(p.foto_url || '')}" placeholder="https://... (link de la foto)" style="width:100%;margin-top:4px;font-size:11px;color:#9a9a9a">
+      </td>
       <td><input class="e-precio" type="number" value="${p.precio}" style="width:90px"></td>
       <td><input class="e-talle" value="${esc(p.talle || '')}" style="width:70px"></td>
       <td><input class="e-stock" type="number" value="${p.stock_disponible}" style="width:60px"></td>
       <td><input class="e-activo" type="checkbox" ${p.activo ? 'checked' : ''}></td>
-      <td class="right"><button class="btn mini guardar"><span>Guardar</span></button> <button class="btn mini ghost borrar"><span>X</span></button></td>
+      <td class="right">
+        <button class="btn mini guardar"><span>Guardar</span></button>
+        <button class="btn mini ghost duplicar"><span>Duplicar</span></button>
+        <button class="btn mini ghost borrar"><span>X</span></button>
+      </td>
     </tr>`).join('')}</tbody></table>`;
 
   document.getElementById('pf-btn').addEventListener('click', async () => {
@@ -187,8 +194,23 @@ async function vProductos() {
           id, nombre: tr.querySelector('.e-nombre').value, precio: Number(tr.querySelector('.e-precio').value),
           talle: tr.querySelector('.e-talle').value, stock_disponible: parseInt(tr.querySelector('.e-stock').value, 10),
           activo: tr.querySelector('.e-activo').checked,
+          foto_url: tr.querySelector('.e-foto').value.trim() || null,
         }});
         CHK.toast('Guardado');
+      } catch (e) { alert(e.message); }
+    });
+    tr.querySelector('.duplicar').addEventListener('click', async () => {
+      try {
+        await api('/api/admin/productos', { method: 'POST', body: {
+          nombre: tr.querySelector('.e-nombre').value + ' (copia)',
+          precio: Number(tr.querySelector('.e-precio').value),
+          talle: tr.querySelector('.e-talle').value,
+          stock_total: parseInt(tr.querySelector('.e-stock').value, 10) || 1,
+          foto_url: tr.querySelector('.e-foto').value.trim() || null,
+          orden: parseInt(tr.dataset.orden, 10) || 0,
+        }});
+        CHK.toast('Duplicado');
+        vProductos();
       } catch (e) { alert(e.message); }
     });
     tr.querySelector('.borrar').addEventListener('click', async () => {
