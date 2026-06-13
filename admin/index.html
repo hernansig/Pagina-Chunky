@@ -80,6 +80,16 @@ const api = async (path, opts = {}) => {
 };
 const money = n => '$' + Number(n || 0).toLocaleString('es-UY');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const dirTexto = d => {
+  if (!d || !d.calle) return '';
+  let t = esc(d.calle);
+  if (d.ciudad) t += ', ' + esc(d.ciudad);
+  if (d.departamento) t += ', ' + esc(d.departamento);
+  if (d.cp) t += ' (CP ' + esc(d.cp) + ')';
+  if (d.telefono) t += ' · tel ' + esc(d.telefono);
+  if (d.notas) t += ' · ' + esc(d.notas);
+  return t;
+};
 const vista = () => document.getElementById('vista');
 
 function mostrarLogin() { document.getElementById('login').style.display = ''; document.getElementById('panel').style.display = 'none'; }
@@ -118,7 +128,7 @@ async function vPedidos() {
     <th>Código</th><th>Cliente</th><th>Productos</th><th>Total</th><th>Pago</th><th>Envío</th></tr></thead>
     <tbody>${pedidos.map(p => `<tr>
       <td><b>${esc(p.codigo_publico)}</b><br><span style="color:#555">${new Date(p.created_at).toLocaleDateString('es-UY')}</span></td>
-      <td>${esc(p.cliente_nombre || '—')}<br><span style="color:#555">${esc(p.cliente_contacto || '')}</span></td>
+      <td>${esc(p.cliente_nombre || '—')}<br><span style="color:#555">${esc(p.cliente_contacto || '')}</span>${p.direccion_envio && p.direccion_envio.calle ? `<br><span style="color:#8a8a8a;font-size:11px">envío: ${dirTexto(p.direccion_envio)}</span>` : ''}</td>
       <td>${(p.productos || []).map(x => esc(x.nombre) + ' ×' + (x.cantidad || 1)).join('<br>')}</td>
       <td>${money(p.monto_total)}</td>
       <td><span class="pill ${p.estado_pago}">${p.estado_pago}</span></td>

@@ -115,6 +115,11 @@ async function notificarPagoConfirmado(pedido) {
   }
 
   // Dueño
+  const dir = pedido.direccion_envio || {};
+  const dirHtml = dir.calle
+    ? `${dir.calle}<br>${dir.ciudad || ''}${dir.departamento ? ', ' + dir.departamento : ''}${dir.cp ? ' (CP ' + dir.cp + ')' : ''}<br>
+       Tel: ${dir.telefono || '—'}${dir.notas ? '<br>Ref: ' + dir.notas : ''}`
+    : '—';
   await avisarDueno({
     subject: `NUEVA VENTA — ${pedido.codigo_publico} ($${pedido.monto_total})`,
     html: plantilla({
@@ -123,7 +128,8 @@ async function notificarPagoConfirmado(pedido) {
         <b>Código:</b> ${pedido.codigo_publico}<br>
         <b>Cliente:</b> ${pedido.cliente_nombre || '—'} (${pedido.cliente_contacto || '—'})<br>
         <b>Total:</b> $${pedido.monto_total}<br>
-        <b>Productos:</b><br>${lista}`,
+        <b>Productos:</b><br>${lista}<br><br>
+        <b>Enviar a:</b><br>${dirHtml}`,
     }),
   });
 }

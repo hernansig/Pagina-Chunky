@@ -33,6 +33,7 @@ create table if not exists pedidos (
   codigo_publico    text        not null unique,          -- ej: CHK-7F3A9K
   cliente_nombre    text,
   cliente_contacto  text,                                  -- email del comprador
+  direccion_envio   jsonb,                                 -- {calle, ciudad, departamento, cp, telefono, notas}
   productos         jsonb       not null default '[]',     -- [{producto_id, nombre, precio, cantidad}]
   monto_total       numeric(12,2) not null default 0,
   estado_pago       text        not null default 'pendiente'

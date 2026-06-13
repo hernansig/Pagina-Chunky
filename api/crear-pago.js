@@ -19,6 +19,25 @@ export default async function handler(req, res) {
     if (!productoId) return fail(res, 400, 'Falta el producto.');
     if (!isEmail(email)) return fail(res, 400, 'Email inválido.');
 
+    // Datos de envío (obligatorios: se manda apenas se confirma el pago).
+    const d = body.direccion || {};
+    const direccion = {
+      calle: (d.calle || '').trim(),
+      ciudad: (d.ciudad || '').trim(),
+      departamento: (d.departamento || '').trim(),
+      cp: (d.cp || '').trim(),
+      telefono: (d.telefono || '').trim(),
+      notas: (d.notas || '').trim(),
+    };
+    if (!direccion.calle || !direccion.ciudad || !direccion.departamento || !direccion.telefono) {
+      return fail(res, 400, 'Completá la dirección, ciudad, departamento y teléfono.');
+    }
+
+    // Si MercadoPago no está configurado, avisamos claro (en vez de un 500 genérico).
+    if (!process.env.MP_ACCESS_TOKEN) {
+      return fail(res, 503, 'Los pagos no están disponibles en este momento.');
+    }
+
     const sb = supa();
     const { data: producto, error: e1 } = await sb
       .from('productos')
@@ -44,6 +63,7 @@ export default async function handler(req, res) {
         codigo_publico: codigo,
         cliente_nombre: nombre,
         cliente_contacto: email,
+        direccion_envio: direccion,
         productos: [itemPedido],
         monto_total: montoTotal,
         estado_pago: 'pendiente',

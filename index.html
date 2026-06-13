@@ -57,13 +57,43 @@
     <h2 id="modal-titulo">Comprar</h2>
     <div class="sub" id="modal-sub"></div>
     <div id="modal-form">
-      <div class="form-field" id="campo-nombre" style="margin-bottom:14px">
-        <label class="form-label" for="m-nombre">Nombre</label>
+      <div class="form-field" id="campo-nombre" style="margin-bottom:12px">
+        <label class="form-label" for="m-nombre">Nombre y apellido</label>
         <input class="form-input" id="m-nombre" type="text" placeholder="Tu nombre">
       </div>
-      <div class="form-field" style="margin-bottom:16px">
+      <div class="form-field" style="margin-bottom:12px">
         <label class="form-label" for="m-email">Tu email</label>
         <input class="form-input" id="m-email" type="email" placeholder="tu@mail.com">
+      </div>
+      <div id="campos-envio">
+        <div class="form-field" style="margin-bottom:12px">
+          <label class="form-label" for="m-calle">Dirección (calle y número)</label>
+          <input class="form-input" id="m-calle" type="text" placeholder="Av. Italia 1234">
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <div class="form-field" style="flex:1">
+            <label class="form-label" for="m-ciudad">Ciudad / localidad</label>
+            <input class="form-input" id="m-ciudad" type="text" placeholder="Montevideo">
+          </div>
+          <div class="form-field" style="flex:1">
+            <label class="form-label" for="m-depto">Departamento</label>
+            <input class="form-input" id="m-depto" type="text" placeholder="Montevideo">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <div class="form-field" style="flex:1">
+            <label class="form-label" for="m-cp">Código postal</label>
+            <input class="form-input" id="m-cp" type="text" placeholder="11000">
+          </div>
+          <div class="form-field" style="flex:1">
+            <label class="form-label" for="m-tel">Teléfono</label>
+            <input class="form-input" id="m-tel" type="tel" placeholder="09X XXX XXX">
+          </div>
+        </div>
+        <div class="form-field" style="margin-bottom:16px">
+          <label class="form-label" for="m-notas">Referencias (opcional)</label>
+          <input class="form-input" id="m-notas" type="text" placeholder="Apto, esquina, entre calles...">
+        </div>
       </div>
       <button class="btn big" id="modal-accion"><span>Continuar</span></button>
       <div class="modal-msg" id="modal-msg"></div>
@@ -170,6 +200,7 @@ function abrirModal(accion, producto) {
   document.getElementById('modal-titulo').textContent = accion === 'comprar' ? 'Comprar' : 'Reservar';
   document.getElementById('modal-sub').textContent = producto.nombre + (producto.talle && producto.talle !== '—' ? ` · T ${producto.talle}` : '');
   document.getElementById('campo-nombre').style.display = accion === 'comprar' ? '' : 'none';
+  document.getElementById('campos-envio').style.display = accion === 'comprar' ? '' : 'none';
   document.getElementById('modal-accion').querySelector('span').textContent = accion === 'comprar' ? 'Ir a pagar' : 'Reservar 24hs';
   document.getElementById('modal-msg').textContent = '';
   document.getElementById('modal-form').style.display = '';
@@ -188,11 +219,26 @@ document.getElementById('modal-accion').addEventListener('click', async () => {
   msg.className = 'modal-msg'; msg.textContent = '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { msg.classList.add('error'); msg.textContent = 'Poné un email válido.'; return; }
 
+  let direccion = null;
+  if (modalCtx.accion === 'comprar') {
+    direccion = {
+      calle: document.getElementById('m-calle').value.trim(),
+      ciudad: document.getElementById('m-ciudad').value.trim(),
+      departamento: document.getElementById('m-depto').value.trim(),
+      cp: document.getElementById('m-cp').value.trim(),
+      telefono: document.getElementById('m-tel').value.trim(),
+      notas: document.getElementById('m-notas').value.trim(),
+    };
+    if (!direccion.calle || !direccion.ciudad || !direccion.departamento || !direccion.telefono) {
+      msg.classList.add('error'); msg.textContent = 'Completá dirección, ciudad, departamento y teléfono.'; return;
+    }
+  }
+
   const btn = document.getElementById('modal-accion');
   btn.disabled = true; btn.querySelector('span').textContent = 'Procesando...';
   try {
     if (modalCtx.accion === 'comprar') {
-      const r = await CHK.api('/api/crear-pago', { method: 'POST', body: { producto_id: modalCtx.producto.id, email, nombre } });
+      const r = await CHK.api('/api/crear-pago', { method: 'POST', body: { producto_id: modalCtx.producto.id, email, nombre, direccion } });
       window.location.href = r.init_point;
     } else {
       const r = await CHK.api('/api/reservar', { method: 'POST', body: { producto_id: modalCtx.producto.id, email } });
