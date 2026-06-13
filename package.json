@@ -1,0 +1,19 @@
+{
+  "name": "chunky-snkrs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web de Chunky Snkrs — catálogo, checkout MercadoPago, reservas, minijuego, ruleta y admin.",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "mercadopago": "^2.0.15",
+    "nodemailer": "^6.9.14"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

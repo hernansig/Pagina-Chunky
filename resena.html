@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dejá tu reseña — CHUNKY SNKRS</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .stars-input { display: flex; gap: 8px; font-size: 34px; cursor: pointer; }
+    .stars-input span { color: #333; transition: color .12s; }
+    .stars-input span.on { color: var(--red); }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="ticker-wrap" aria-hidden="true"><div class="ticker-track">
+    <span class="ticker-item">TU OPINIÓN CUENTA</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">TU OPINIÓN CUENTA</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">TU OPINIÓN CUENTA</span><span class="ticker-item">CHUNKY SNKRS</span>
+  </div></div>
+
+  <div class="page-title"><h1>DEJÁ TU <span>RESEÑA</span></h1><p id="sub">Contanos cómo te fue</p></div>
+
+  <main class="catalog narrow">
+    <div id="form-wrap">
+      <div class="form-field" style="margin-bottom:18px">
+        <label class="form-label">Puntuación</label>
+        <div class="stars-input" id="stars">
+          <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span><span data-v="4">★</span><span data-v="5">★</span>
+        </div>
+      </div>
+      <div class="form-field" style="margin-bottom:14px">
+        <label class="form-label" for="nombre">Tu nombre</label>
+        <input class="form-input" id="nombre" placeholder="Cómo querés que aparezca">
+      </div>
+      <div class="form-field" style="margin-bottom:16px">
+        <label class="form-label" for="texto">Tu reseña</label>
+        <textarea class="form-textarea" id="texto" placeholder="Qué compraste, cómo llegó, qué te pareció..."></textarea>
+      </div>
+      <button class="btn big" id="enviar"><span>Enviar reseña</span></button>
+      <div class="modal-msg" id="msg" style="text-align:center"></div>
+    </div>
+    <div id="gracias" style="display:none;text-align:center;padding:30px 0">
+      <div class="modal-msg ok" style="font-size:18px">¡Gracias! Tu reseña queda pendiente de aprobación.</div>
+      <a class="btn big" href="/" style="max-width:240px;margin:18px auto 0"><span>Volver al catálogo</span></a>
+    </div>
+  </main>
+</div>
+
+<script src="/assets/chrome.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const codigo = params.get('p');
+const token = params.get('t');
+let rating = 0;
+
+const stars = document.getElementById('stars');
+stars.addEventListener('click', e => {
+  const v = e.target.dataset.v; if (!v) return;
+  rating = parseInt(v, 10);
+  [...stars.children].forEach(s => s.classList.toggle('on', parseInt(s.dataset.v, 10) <= rating));
+});
+
+const msg = document.getElementById('msg');
+document.getElementById('enviar').addEventListener('click', async () => {
+  msg.className = 'modal-msg'; msg.textContent = '';
+  if (!codigo || !token) { msg.classList.add('error'); msg.textContent = 'Link inválido o vencido.'; return; }
+  if (!rating) { msg.classList.add('error'); msg.textContent = 'Elegí una puntuación.'; return; }
+  const texto = document.getElementById('texto').value.trim();
+  if (texto.length < 4) { msg.classList.add('error'); msg.textContent = 'Escribí un poco más.'; return; }
+
+  const btn = document.getElementById('enviar');
+  btn.disabled = true; btn.querySelector('span').textContent = 'Enviando...';
+  try {
+    await CHK.api('/api/resena', { method: 'POST', body: {
+      codigo, token, rating, texto, nombre: document.getElementById('nombre').value.trim(),
+    }});
+    document.getElementById('form-wrap').style.display = 'none';
+    document.getElementById('gracias').style.display = '';
+  } catch (e) {
+    msg.classList.add('error'); msg.textContent = e.message;
+    btn.disabled = false; btn.querySelector('span').textContent = 'Enviar reseña';
+  }
+});
+
+if (!codigo || !token) document.getElementById('sub').textContent = 'Link inválido';
+</script>
+</body>
+</html>

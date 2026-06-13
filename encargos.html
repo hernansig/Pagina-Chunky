@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Encargos — CHUNKY SNKRS</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/base.css">
+</head>
+<body>
+<div class="wrapper">
+  <div class="ticker-wrap" aria-hidden="true"><div class="ticker-track">
+    <span class="ticker-item">PEDÍ LO QUE QUIERAS</span><span class="ticker-item">ENCARGOS</span>
+    <span class="ticker-item">PEDÍ LO QUE QUIERAS</span><span class="ticker-item">ENCARGOS</span>
+    <span class="ticker-item">PEDÍ LO QUE QUIERAS</span><span class="ticker-item">ENCARGOS</span>
+  </div></div>
+
+  <div class="page-title"><h1>PEDIDOS POR <span>ENCARGO</span></h1><p>Conseguimos lo que buscás</p></div>
+
+  <main class="catalog narrow">
+    <div class="info-box">
+      <h3>Cómo funciona</h3>
+      <ul>
+        <li>Decinos marca, modelo, talle y color de lo que buscás.</li>
+        <li>Te pasamos la cotizacion por mail o Whatsapp.</li>
+        <li>Tiempo de entrega del encargo: aproximadamente 25 días.</li>
+        <li>No se realizan cambios una vez confirmado el encargo.</li>
+      </ul>
+    </div>
+
+    <form id="form-encargo" novalidate>
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="form-label" for="enc-nombre">Nombre</label>
+          <input class="form-input" type="text" id="enc-nombre" placeholder="Tu nombre" required>
+          <span class="field-error" id="err-nombre">Mínimo 2 letras.</span>
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="enc-contacto">Contacto (mail o teléfono)</label>
+          <input class="form-input" type="text" id="enc-contacto" placeholder="tu@mail.com / 09X XXX XXX" required>
+          <span class="field-error" id="err-contacto">Dejanos un contacto válido.</span>
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="enc-producto">Producto deseado</label>
+          <input class="form-input" type="text" id="enc-producto" placeholder="Marca / modelo / color" required>
+          <span class="field-error" id="err-producto">Decinos qué buscás.</span>
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="enc-talle">Talle</label>
+          <input class="form-input" type="text" id="enc-talle" placeholder="Ej: 42 / L">
+        </div>
+        <div class="form-field form-full">
+          <label class="form-label" for="enc-detalles">Detalles adicionales</label>
+          <textarea class="form-textarea" id="enc-detalles" placeholder="Cualquier otra cosa que nos sirva..."></textarea>
+        </div>
+      </div>
+      <button class="btn big" type="submit"><span>Enviar encargo</span></button>
+      <div class="modal-msg" id="form-msg" style="text-align:center"></div>
+    </form>
+  </main>
+</div>
+
+<script src="/assets/chrome.js"></script>
+<script>
+const form = document.getElementById('form-encargo');
+const msg = document.getElementById('form-msg');
+
+function val(id) { return document.getElementById(id).value.trim(); }
+function setErr(id, errId, bad) {
+  document.getElementById(id).classList.toggle('invalid', bad);
+  document.getElementById(errId).style.display = bad ? 'block' : 'none';
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  msg.className = 'modal-msg'; msg.textContent = '';
+  const nombre = val('enc-nombre'), contacto = val('enc-contacto'), producto = val('enc-producto');
+  const bN = nombre.length < 2, bC = contacto.length < 5, bP = producto.length < 2;
+  setErr('enc-nombre', 'err-nombre', bN);
+  setErr('enc-contacto', 'err-contacto', bC);
+  setErr('enc-producto', 'err-producto', bP);
+  if (bN || bC || bP) return;
+
+  const btn = form.querySelector('button[type=submit]');
+  btn.disabled = true; btn.querySelector('span').textContent = 'Enviando...';
+  try {
+    await CHK.api('/api/encargo', { method: 'POST', body: {
+      nombre, contacto, producto_deseado: producto,
+      talle: val('enc-talle'), detalles: val('enc-detalles'),
+    }});
+    form.reset();
+    msg.className = 'modal-msg ok'; msg.textContent = 'Encargo enviado. Te contactamos para cotizarte.';
+  } catch (err) {
+    msg.className = 'modal-msg error'; msg.textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.querySelector('span').textContent = 'Enviar encargo';
+  }
+});
+</script>
+</body>
+</html>

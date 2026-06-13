@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rastrear pedido — CHUNKY SNKRS</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .stepper { display: flex; gap: 0; margin: 24px 0 10px; }
+    .step { flex: 1; text-align: center; position: relative; padding-top: 26px; }
+    .step::before { content: ''; position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; border-radius: 50%; background: var(--dark2); border: 1px solid #333; }
+    .step::after { content: ''; position: absolute; top: 12px; left: 50%; width: 100%; height: 2px; background: #222; z-index: -1; }
+    .step:last-child::after { display: none; }
+    .step.on::before { background: var(--red); border-color: var(--red); box-shadow: 0 0 10px var(--red); }
+    .step .lbl { font-family: 'Bebas Neue', sans-serif; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+    .step.on .lbl { color: var(--bone); }
+    .pedido-box { border: 1px solid var(--bordo); background: var(--carbon); padding: 26px 24px; margin-top: 20px; }
+    .pedido-box .codigo { font-family: 'Permanent Marker', cursive; font-size: 26px; color: var(--white); }
+    .pedido-box .linea { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; color: #cfc7b8; border-bottom: 1px solid #1c1c1c; }
+    .estado-pill { display: inline-block; font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; padding: 3px 10px; border: 1px solid var(--red); color: var(--red); text-transform: uppercase; font-size: 13px; }
+    .estado-pill.ok { border-color: #6f9f4f; color: #8fbf6f; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="ticker-wrap" aria-hidden="true"><div class="ticker-track">
+    <span class="ticker-item">RASTREÁ TU PEDIDO</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">RASTREÁ TU PEDIDO</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">RASTREÁ TU PEDIDO</span><span class="ticker-item">CHUNKY SNKRS</span>
+  </div></div>
+
+  <div class="page-title"><h1>RASTREAR <span>PEDIDO</span></h1><p>Ingresá tu código (ej: CHK-XXXXXX)</p></div>
+
+  <main class="catalog narrow">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <input class="form-input" id="codigo" placeholder="CHK-XXXXXX" style="flex:1;min-width:200px;text-transform:uppercase">
+      <button class="btn" id="buscar" style="max-width:160px"><span>Buscar</span></button>
+    </div>
+    <div class="modal-msg error" id="msg" style="text-align:center"></div>
+    <div id="resultado"></div>
+  </main>
+</div>
+
+<script src="/assets/chrome.js"></script>
+<script>
+const input = document.getElementById('codigo');
+const msg = document.getElementById('msg');
+const out = document.getElementById('resultado');
+
+function codigoDeURL() {
+  const m = location.pathname.match(/\/pedido\/([^/?#]+)/i);
+  if (m) return decodeURIComponent(m[1]);
+  return new URLSearchParams(location.search).get('codigo') || '';
+}
+
+async function buscar() {
+  const codigo = input.value.trim().toUpperCase();
+  msg.textContent = ''; out.innerHTML = '';
+  if (!codigo) { msg.textContent = 'Ingresá tu código.'; return; }
+  out.innerHTML = '<div class="cargando">buscando...</div>';
+  try {
+    const { pedido } = await CHK.api('/api/pedido?codigo=' + encodeURIComponent(codigo));
+    render(pedido);
+  } catch (e) {
+    out.innerHTML = ''; msg.textContent = e.message;
+  }
+}
+
+function render(p) {
+  const pagado = p.estado_pago === 'pagado';
+  const pasos = ['preparando', 'enviado', 'entregado'];
+  // El índice "activo" depende del estado de envío (si está pagado).
+  let activo = pagado ? pasos.indexOf(p.estado_envio) : -1;
+  const stepper = pasos.map((s, i) => `
+    <div class="step ${pagado && i <= activo ? 'on' : ''}"><div class="lbl">${s}</div></div>`).join('');
+  const items = p.productos.map(x => `<div class="linea"><span>${x.nombre}</span><span>× ${x.cantidad}</span></div>`).join('');
+  out.innerHTML = `
+    <div class="pedido-box">
+      <div class="codigo">${p.codigo}</div>
+      <div style="margin:14px 0">
+        <span class="estado-pill ${pagado ? 'ok' : ''}">${pagado ? 'Pagado' : p.estado_pago}</span>
+      </div>
+      ${pagado ? `<div class="stepper">${stepper}</div>` : '<p style="color:#cfc7b8;font-size:14px;margin:10px 0">Estamos esperando la confirmación del pago. Si ya pagaste, puede tardar unos minutos en actualizarse.</p>'}
+      <div style="margin-top:18px">${items}</div>
+      <div class="linea" style="border:none;margin-top:8px"><span style="color:var(--white)">Total</span><span class="card-price">${CHK.money(p.monto_total)}</span></div>
+    </div>`;
+}
+
+document.getElementById('buscar').addEventListener('click', buscar);
+input.addEventListener('keydown', e => { if (e.key === 'Enter') buscar(); });
+
+const inicial = codigoDeURL();
+if (inicial) { input.value = inicial; buscar(); }
+</script>
+</body>
+</html>

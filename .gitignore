@@ -1,0 +1,18 @@
+# dependencias
+node_modules/
+
+# variables de entorno (NUNCA subir a git)
+.env
+.env.local
+.env.*.local
+
+# vercel
+.vercel/
+
+# logs
+*.log
+npm-debug.log*
+
+# sistema
+.DS_Store
+Thumbs.db

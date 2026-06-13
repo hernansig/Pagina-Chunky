@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Panel — CHUNKY SNKRS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    body { cursor: default; }
+    .admin-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; position: relative; z-index: 2; }
+    .admin-top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 1px solid var(--bordo); flex-wrap: wrap; gap: 12px; }
+    .admin-top h1 { font-family: 'Permanent Marker', cursive; font-size: 26px; color: var(--white); }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 22px 0; }
+    .tab { font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; text-transform: uppercase; font-size: 15px; padding: 8px 16px; border: 1px solid #2a2a2a; background: var(--carbon); color: var(--bone); cursor: pointer; }
+    .tab.activo { border-color: var(--red); color: var(--red); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #1c1c1c; vertical-align: top; }
+    th { font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; font-size: 12px; }
+    select, input, textarea { background: var(--dark); border: 1px solid #2a2a2a; color: var(--bone); font-family: 'Oswald', sans-serif; padding: 6px 8px; font-size: 13px; }
+    .pill { font-family: 'Bebas Neue', sans-serif; letter-spacing: 1px; padding: 2px 8px; border: 1px solid; text-transform: uppercase; font-size: 12px; }
+    .pill.pagado, .pill.aprobada, .pill.confirmado, .pill.entregado { border-color: #6f9f4f; color: #8fbf6f; }
+    .pill.pendiente, .pill.preparando { border-color: #b8a13a; color: #d8c45a; }
+    .pill.rechazado, .pill.vencida { border-color: var(--red); color: var(--red); }
+    .login-card { max-width: 360px; margin: 80px auto; border: 1px solid var(--bordo); background: var(--carbon); padding: 32px 28px; position: relative; z-index: 2; }
+    .login-card h1 { font-family: 'Permanent Marker', cursive; font-size: 24px; color: var(--white); text-align: center; margin-bottom: 22px; }
+    .login-card input { width: 100%; margin-bottom: 12px; padding: 10px; }
+    .prod-form { border: 1px solid #2a2a2a; background: var(--carbon); padding: 18px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 10px; align-items: end; }
+    .prod-form .full { grid-column: 1 / -1; }
+    .mini { font-size: 11px; padding: 4px 10px; }
+    .right { text-align: right; }
+    .empty { color: var(--muted); padding: 30px 0; text-align: center; font-family: 'Bebas Neue'; letter-spacing: 3px; }
+  </style>
+</head>
+<body>
+<div class="grain"></div>
+
+<!-- LOGIN -->
+<div id="login" class="login-card" style="display:none">
+  <h1>CHUNKY · PANEL</h1>
+  <input id="lg-user" placeholder="Usuario" autocomplete="username">
+  <input id="lg-pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+  <button class="btn big" id="lg-btn"><span>Entrar</span></button>
+  <div class="modal-msg error" id="lg-msg" style="text-align:center"></div>
+</div>
+
+<!-- PANEL -->
+<div id="panel" class="admin-wrap" style="display:none">
+  <div class="admin-top">
+    <h1>Panel Chunky</h1>
+    <button class="btn mini" id="logout" style="max-width:120px"><span>Salir</span></button>
+  </div>
+  <div class="tabs">
+    <div class="tab activo" data-tab="pedidos">Pedidos</div>
+    <div class="tab" data-tab="productos">Productos</div>
+    <div class="tab" data-tab="encargos">Encargos</div>
+    <div class="tab" data-tab="resenas">Reseñas</div>
+  </div>
+  <div id="vista"></div>
+</div>
+
+<script>
+const CHK = {
+  toast(msg) {
+    let t = document.querySelector('.toast');
+    if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    requestAnimationFrame(() => t.classList.add('show'));
+    clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove('show'), 2600);
+  },
+};
+const api = async (path, opts = {}) => {
+  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  if (res.status === 401) { mostrarLogin(); throw new Error('Sesión vencida.'); }
+  let d = {}; try { d = await res.json(); } catch {}
+  if (!res.ok) throw new Error(d.error || 'Error.');
+  return d;
+};
+const money = n => '$' + Number(n || 0).toLocaleString('es-UY');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const vista = () => document.getElementById('vista');
+
+function mostrarLogin() { document.getElementById('login').style.display = ''; document.getElementById('panel').style.display = 'none'; }
+function mostrarPanel() { document.getElementById('login').style.display = 'none'; document.getElementById('panel').style.display = ''; cargarTab('pedidos'); }
+
+// ── Login ──
+document.getElementById('lg-btn').addEventListener('click', login);
+document.getElementById('lg-pass').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+async function login() {
+  const msg = document.getElementById('lg-msg'); msg.textContent = '';
+  try {
+    await api('/api/admin/login', { method: 'POST', body: {
+      user: document.getElementById('lg-user').value, password: document.getElementById('lg-pass').value,
+    }});
+    mostrarPanel();
+  } catch (e) { msg.textContent = e.message; }
+}
+document.getElementById('logout').addEventListener('click', async () => { await api('/api/admin/logout', { method: 'POST' }).catch(()=>{}); mostrarLogin(); });
+
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('activo', x === t));
+  cargarTab(t.dataset.tab);
+}));
+
+function cargarTab(tab) {
+  vista().innerHTML = '<div class="empty">cargando...</div>';
+  ({ pedidos: vPedidos, productos: vProductos, encargos: vEncargos, resenas: vResenas })[tab]();
+}
+
+// ── PEDIDOS ──
+async function vPedidos() {
+  const { pedidos } = await api('/api/admin/pedidos');
+  if (!pedidos.length) return vacio('Sin pedidos todavía.');
+  vista().innerHTML = `<table><thead><tr>
+    <th>Código</th><th>Cliente</th><th>Productos</th><th>Total</th><th>Pago</th><th>Envío</th></tr></thead>
+    <tbody>${pedidos.map(p => `<tr>
+      <td><b>${esc(p.codigo_publico)}</b><br><span style="color:#555">${new Date(p.created_at).toLocaleDateString('es-UY')}</span></td>
+      <td>${esc(p.cliente_nombre || '—')}<br><span style="color:#555">${esc(p.cliente_contacto || '')}</span></td>
+      <td>${(p.productos || []).map(x => esc(x.nombre) + ' ×' + (x.cantidad || 1)).join('<br>')}</td>
+      <td>${money(p.monto_total)}</td>
+      <td><span class="pill ${p.estado_pago}">${p.estado_pago}</span></td>
+      <td>${p.estado_pago === 'pagado'
+        ? `<select data-id="${p.id}" class="envio">
+            ${['preparando','enviado','entregado'].map(s => `<option ${s===p.estado_envio?'selected':''}>${s}</option>`).join('')}
+          </select>` : '<span style="color:#555">—</span>'}</td>
+    </tr>`).join('')}</tbody></table>`;
+  vista().querySelectorAll('select.envio').forEach(sel => sel.addEventListener('change', async () => {
+    try { await api('/api/admin/pedidos', { method: 'PATCH', body: { id: sel.dataset.id, estado_envio: sel.value } }); CHK.toast('Envío actualizado'); }
+    catch (e) { alert(e.message); }
+  }));
+}
+
+// ── PRODUCTOS ──
+async function vProductos() {
+  const { productos } = await api('/api/admin/productos');
+  vista().innerHTML = `
+    <div class="prod-form" id="pf">
+      <div><label class="form-label">Nombre</label><input id="pf-nombre" style="width:100%"></div>
+      <div><label class="form-label">Precio</label><input id="pf-precio" type="number" style="width:100%"></div>
+      <div><label class="form-label">Talle</label><input id="pf-talle" style="width:100%"></div>
+      <div><label class="form-label">Stock</label><input id="pf-stock" type="number" value="1" style="width:100%"></div>
+      <div class="full"><label class="form-label">Foto URL</label><input id="pf-foto" style="width:100%" placeholder="https://..."></div>
+      <div><button class="btn mini" id="pf-btn"><span>Agregar</span></button></div>
+    </div>
+    <table><thead><tr><th>Producto</th><th>Precio</th><th>Talle</th><th>Disp.</th><th>Activo</th><th></th></tr></thead>
+    <tbody>${productos.map(p => `<tr data-id="${p.id}">
+      <td><input class="e-nombre" value="${esc(p.nombre)}" style="width:100%"></td>
+      <td><input class="e-precio" type="number" value="${p.precio}" style="width:90px"></td>
+      <td><input class="e-talle" value="${esc(p.talle || '')}" style="width:70px"></td>
+      <td><input class="e-stock" type="number" value="${p.stock_disponible}" style="width:60px"></td>
+      <td><input class="e-activo" type="checkbox" ${p.activo ? 'checked' : ''}></td>
+      <td class="right"><button class="btn mini guardar"><span>Guardar</span></button> <button class="btn mini ghost borrar"><span>X</span></button></td>
+    </tr>`).join('')}</tbody></table>`;
+
+  document.getElementById('pf-btn').addEventListener('click', async () => {
+    const nombre = document.getElementById('pf-nombre').value.trim();
+    const precio = document.getElementById('pf-precio').value;
+    if (!nombre || precio === '') return alert('Nombre y precio.');
+    try {
+      await api('/api/admin/productos', { method: 'POST', body: {
+        nombre, precio: Number(precio), talle: document.getElementById('pf-talle').value.trim(),
+        stock_total: parseInt(document.getElementById('pf-stock').value, 10) || 1,
+        foto_url: document.getElementById('pf-foto').value.trim() || null,
+      }});
+      vProductos();
+    } catch (e) { alert(e.message); }
+  });
+
+  vista().querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    tr.querySelector('.guardar').addEventListener('click', async () => {
+      try {
+        await api('/api/admin/productos', { method: 'PATCH', body: {
+          id, nombre: tr.querySelector('.e-nombre').value, precio: Number(tr.querySelector('.e-precio').value),
+          talle: tr.querySelector('.e-talle').value, stock_disponible: parseInt(tr.querySelector('.e-stock').value, 10),
+          activo: tr.querySelector('.e-activo').checked,
+        }});
+        CHK.toast('Guardado');
+      } catch (e) { alert(e.message); }
+    });
+    tr.querySelector('.borrar').addEventListener('click', async () => {
+      if (!confirm('¿Borrar producto?')) return;
+      try { await api('/api/admin/productos', { method: 'DELETE', body: { id } }); tr.remove(); } catch (e) { alert(e.message); }
+    });
+  });
+}
+
+// ── ENCARGOS ──
+async function vEncargos() {
+  const { encargos } = await api('/api/admin/encargos');
+  if (!encargos.length) return vacio('Sin encargos.');
+  vista().innerHTML = `<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Talle</th><th>Detalles</th><th>Estado</th></tr></thead>
+    <tbody>${encargos.map(e => `<tr>
+      <td>${new Date(e.created_at).toLocaleDateString('es-UY')}</td>
+      <td>${esc(e.cliente_nombre)}<br><span style="color:#555">${esc(e.contacto)}</span></td>
+      <td>${esc(e.producto_deseado)}</td><td>${esc(e.talle || '—')}</td><td>${esc(e.detalles || '—')}</td>
+      <td><select data-id="${e.id}" class="enc-estado">${['pendiente','cotizado','confirmado'].map(s => `<option ${s===e.estado?'selected':''}>${s}</option>`).join('')}</select></td>
+    </tr>`).join('')}</tbody></table>`;
+  vista().querySelectorAll('select.enc-estado').forEach(sel => sel.addEventListener('change', async () => {
+    try { await api('/api/admin/encargos', { method: 'PATCH', body: { id: sel.dataset.id, estado: sel.value } }); CHK.toast('Actualizado'); }
+    catch (e) { alert(e.message); }
+  }));
+}
+
+// ── RESEÑAS ──
+async function vResenas() {
+  const { resenas } = await api('/api/admin/resenas');
+  if (!resenas.length) return vacio('Sin reseñas.');
+  vista().innerHTML = `<table><thead><tr><th>Fecha</th><th>Autor</th><th>Rating</th><th>Texto</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${resenas.map(r => `<tr data-id="${r.id}">
+      <td>${new Date(r.created_at).toLocaleDateString('es-UY')}</td>
+      <td>${esc(r.cliente_nombre || 'Anónimo')}</td>
+      <td style="color:var(--red)">${'★'.repeat(r.rating)}</td>
+      <td>${esc(r.texto)}</td>
+      <td><span class="pill ${r.estado}">${r.estado}</span></td>
+      <td class="right">
+        <button class="btn mini aprobar"><span>Aprobar</span></button>
+        <button class="btn mini ghost rechazar"><span>Rechazar</span></button>
+      </td>
+    </tr>`).join('')}</tbody></table>`;
+  vista().querySelectorAll('tr[data-id]').forEach(tr => {
+    const id = tr.dataset.id;
+    const set = async estado => { try { await api('/api/admin/resenas', { method: 'PATCH', body: { id, estado } }); vResenas(); } catch (e) { alert(e.message); } };
+    tr.querySelector('.aprobar').addEventListener('click', () => set('aprobada'));
+    tr.querySelector('.rechazar').addEventListener('click', () => set('rechazada'));
+  });
+}
+
+function vacio(txt) { vista().innerHTML = `<div class="empty">${txt}</div>`; }
+
+// ── init: ¿hay sesión? ──
+(async () => {
+  try { await api('/api/admin/session'); mostrarPanel(); }
+  catch { mostrarLogin(); }
+})();
+</script>
+</body>
+</html>
