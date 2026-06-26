@@ -122,13 +122,39 @@
     f.innerHTML = `
       <div class="footer-logo">Chunky Snkrs</div>
       <div class="footer-ig"><a href="${IG}" target="_blank" rel="noopener">@chunkysnkrs.uy</a></div>
+      <div class="footer-contacto">Contacto: <a href="mailto:chunkysnkrs.uy@gmail.com">chunkysnkrs.uy@gmail.com</a> · @chunkysnkrs.uy</div>
       <div class="footer-links">
         <a href="/">catálogo</a><a href="/encargos">encargos</a>
         <a href="/pedido">rastrear pedido</a><a href="/minijuego">minijuego</a>
+        <a href="/privacidad">política de privacidad</a><a href="/terminos">términos y condiciones</a>
       </div>
-      <div class="footer-copy">Streetwear Uruguay — No se realizan cambios — Envíos 3 a 4 días hábiles</div>`;
+      <div class="footer-pagos">Los pagos son procesados por MercadoPago. No almacenamos datos de tarjetas.</div>
+      <div class="footer-copy">© 2026 Chunky Snkrs — Uruguay · No se realizan cambios · Envíos 3 a 4 días hábiles</div>`;
     const wrapper = document.querySelector('.wrapper') || document.body;
     wrapper.appendChild(f);
+  }
+
+  // ── Banner de cookies ─────────────────────────────────────
+  function inyectarCookies() {
+    const KEY = 'chk_cookies_ok';
+    try { if (localStorage.getItem(KEY)) return; } catch {}
+    const banner = document.createElement('div');
+    banner.className = 'cookie-banner';
+    banner.setAttribute('role', 'dialog');
+    banner.setAttribute('aria-label', 'Aviso de cookies');
+    banner.innerHTML = `
+      <p class="cookie-text">Este sitio usa cookies para funcionar correctamente y procesar pagos a través de MercadoPago. Al continuar navegando, aceptás su uso.</p>
+      <div class="cookie-actions">
+        <button class="cookie-btn" type="button">Aceptar</button>
+        <a class="cookie-link" href="/privacidad">Ver política de privacidad</a>
+      </div>`;
+    document.body.appendChild(banner);
+    requestAnimationFrame(() => banner.classList.add('show'));
+    banner.querySelector('.cookie-btn').addEventListener('click', () => {
+      try { localStorage.setItem(KEY, '1'); } catch {}
+      banner.classList.remove('show');
+      setTimeout(() => banner.remove(), 350);
+    });
   }
 
   const CRACKS = `
@@ -149,7 +175,7 @@
     .cg5{animation:crack-pulse 4.9s ease-in-out infinite 3.2s}`;
   document.head.appendChild(style);
 
-  function init() { inyectarFondo(); inyectarNav(); inyectarFooter(); }
+  function init() { inyectarFondo(); inyectarNav(); inyectarFooter(); inyectarCookies(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

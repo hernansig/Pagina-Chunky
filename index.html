@@ -96,6 +96,7 @@
         </div>
       </div>
       <button class="btn big" id="modal-accion"><span>Continuar</span></button>
+      <p class="aviso-pago" id="aviso-pago">Los pagos son procesados de forma segura por MercadoPago. Chunky Snkrs no almacena ni tiene acceso a tus datos de tarjeta. Tu pedido se confirma únicamente cuando MercadoPago notifica el pago exitoso.</p>
       <div class="modal-msg" id="modal-msg"></div>
     </div>
     <div id="modal-ok" style="display:none">
@@ -201,6 +202,7 @@ function abrirModal(accion, producto) {
   document.getElementById('modal-sub').textContent = producto.nombre + (producto.talle && producto.talle !== '—' ? ` · T ${producto.talle}` : '');
   document.getElementById('campo-nombre').style.display = accion === 'comprar' ? '' : 'none';
   document.getElementById('campos-envio').style.display = accion === 'comprar' ? '' : 'none';
+  document.getElementById('aviso-pago').style.display = accion === 'comprar' ? '' : 'none';
   document.getElementById('modal-accion').querySelector('span').textContent = accion === 'comprar' ? 'Ir a pagar' : 'Reservar 24hs';
   document.getElementById('modal-msg').textContent = '';
   document.getElementById('modal-form').style.display = '';
