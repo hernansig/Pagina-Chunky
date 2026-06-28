@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi perfil — CHUNKY SNKRS</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .perfil-msg { border:1px solid var(--bordo); background:rgba(139,0,0,0.10); color:#cfc7b8; font-size:14px; padding:12px 16px; margin-bottom:22px; text-align:center; }
+    .login-box { text-align:center; }
+    .login-box p { color:#bdb5a6; font-size:15px; line-height:1.7; max-width:460px; margin:0 auto 26px; }
+    .btn-google { display:inline-flex; align-items:center; gap:12px; font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:3px; text-transform:uppercase; color:var(--white); background:var(--bordo); border:1px solid var(--red); padding:14px 26px; text-decoration:none; cursor:pointer; transition:background .15s; }
+    .btn-google:hover { background:var(--red); }
+    .btn-google svg { width:20px; height:20px; }
+    .perfil-head { display:flex; align-items:center; gap:18px; border:1px solid #1c1c1c; border-top:2px solid var(--bordo); background:var(--carbon); padding:20px; }
+    .perfil-head img { width:72px; height:72px; border-radius:50%; border:2px solid var(--bordo); object-fit:cover; }
+    .perfil-head .nombre { font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:1px; color:var(--white); line-height:1.1; }
+    .perfil-head .mail { font-size:13px; color:var(--muted); letter-spacing:1px; margin-top:4px; }
+    .saldo-box { display:flex; gap:14px; margin-top:14px; flex-wrap:wrap; }
+    .saldo-card { flex:1; min-width:150px; border:1px solid #1c1c1c; background:var(--carbon); padding:18px; text-align:center; }
+    .saldo-card .num { font-family:'Permanent Marker',cursive; font-size:38px; color:var(--red); line-height:1; }
+    .saldo-card .lbl { font-family:'Oswald',sans-serif; font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-top:8px; }
+    .ped-row { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:13px; color:#cfc7b8; border-bottom:1px solid #1c1c1c; padding:10px 0; }
+    .ped-row .cod { font-family:'Permanent Marker',cursive; color:var(--white); }
+    .pill { font-family:'Bebas Neue',sans-serif; letter-spacing:1px; font-size:12px; padding:2px 8px; border:1px solid var(--bordo); color:var(--bone); text-transform:uppercase; }
+    .pill.ok { border-color:#6f9f4f; color:#8fbf6f; }
+    .btn-salir { display:inline-block; margin-top:24px; font-family:'Bebas Neue',sans-serif; font-size:14px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); background:none; border:1px solid #333; padding:10px 20px; cursor:pointer; transition:color .15s,border-color .15s; }
+    .btn-salir:hover { color:var(--red); border-color:var(--red); }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="ticker-wrap" aria-hidden="true"><div class="ticker-track">
+    <span class="ticker-item">MI PERFIL</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">MI PERFIL</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">MI PERFIL</span><span class="ticker-item">CHUNKY SNKRS</span>
+  </div></div>
+
+  <div class="page-title"><h1>MI <span>PERFIL</span></h1><p>Puntos, ranking y pedidos</p></div>
+
+  <main class="catalog narrow">
+    <div id="msg" class="perfil-msg" style="display:none"></div>
+    <div id="contenido"><div class="cargando">cargando...</div></div>
+  </main>
+</div>
+
+<script src="/assets/chrome.js"></script>
+<script>
+async function authReady() {
+  for (let i = 0; i < 120 && !window.CHKAuth; i++) await new Promise(r => setTimeout(r, 50));
+  if (window.CHKAuth) await window.CHKAuth.ready;
+  return window.CHKAuth;
+}
+function esc(s = '') { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+const out = document.getElementById('contenido');
+const msgEl = document.getElementById('msg');
+const msg = new URLSearchParams(location.search).get('msg');
+if (msg) { msgEl.textContent = msg; msgEl.style.display = ''; }
+
+function vistaLogin() {
+  out.innerHTML = `
+    <div class="login-box">
+      <p>Registrate para jugar, acumular puntos y canjearlos en la ruleta. Tus compras y reservas no necesitan registro.</p>
+      <button class="btn-google" id="g-login">
+        <svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 35 26.8 36 24 36c-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.6 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.2 35.9 44 30.4 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>
+        Continuar con Google
+      </button>
+    </div>`;
+  document.getElementById('g-login').addEventListener('click', () => window.CHKAuth.signInWithGoogle());
+}
+
+function vistaPerfil(d) {
+  const u = d.usuario;
+  const av = u.avatar_url ? `<img src="${esc(u.avatar_url)}" alt="avatar" referrerpolicy="no-referrer">` : '';
+  const pos = d.ranking.posicion ? `#${d.ranking.posicion} de ${d.ranking.jugadores}` : 'sin partidas esta semana';
+  const peds = (d.pedidos || []).length
+    ? d.pedidos.map(p => {
+        const pagado = p.estado_pago === 'pagado';
+        return `<div class="ped-row">
+          <span class="cod">${esc(p.codigo_publico)}</span>
+          <span><span class="pill ${pagado ? 'ok' : ''}">${pagado ? 'pagado' : esc(p.estado_pago)}</span>
+          <span class="pill">${esc(p.estado_envio)}</span></span>
+          <span class="card-price">${CHK.money(p.monto_total)}</span></div>`;
+      }).join('')
+    : '<p style="color:var(--muted);font-size:14px;padding:10px 0">Todavía no tenés pedidos asociados a este mail.</p>';
+
+  out.innerHTML = `
+    <div class="perfil-head">${av}
+      <div><div class="nombre">${esc(u.nombre || u.alias || 'Jugador')}</div>
+      <div class="mail">${esc(u.email || '')}</div></div></div>
+
+    <div class="saldo-box">
+      <div class="saldo-card"><div class="num">${Number(u.puntos_disponibles||0).toLocaleString('es-UY')}</div><div class="lbl">puntos disponibles</div></div>
+      <div class="saldo-card"><div class="num">${Number(u.puntos_totales||0).toLocaleString('es-UY')}</div><div class="lbl">puntos totales</div></div>
+      <div class="saldo-card"><div class="num" style="font-size:24px">${esc(pos)}</div><div class="lbl">ranking semanal</div></div>
+    </div>
+
+    <div class="section-header"><span class="section-label">TUS <span>PEDIDOS</span></span></div>
+    ${peds}
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px">
+      <a class="btn" href="/minijuego/jugar" style="max-width:220px"><span>Jugar minijuego</span></a>
+      <a class="btn ghost" href="/ruleta" style="max-width:220px"><span>Ir a la ruleta</span></a>
+    </div>
+    <button class="btn-salir" id="g-logout">Cerrar sesión</button>`;
+  document.getElementById('g-logout').addEventListener('click', () => window.CHKAuth.signOut());
+}
+
+(async () => {
+  const A = await authReady();
+  if (!A) { out.innerHTML = '<p style="text-align:center;color:var(--muted)">El login no está disponible.</p>'; return; }
+  const u = await A.me(true);
+  if (!u) { vistaLogin(); return; }
+  try {
+    const perfil = await fetch('/api/app/perfil', { headers: { Authorization: 'Bearer ' + (await A.getToken()) } }).then(r => r.json());
+    if (!perfil.ok) throw new Error(perfil.error || 'Error');
+    vistaPerfil(perfil);
+  } catch (e) {
+    vistaPerfil({ usuario: u, ranking: { posicion: null, jugadores: 0 }, pedidos: [] });
+  }
+})();
+</script>
+</body>
+</html>

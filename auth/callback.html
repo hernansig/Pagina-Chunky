@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciando sesión — CHUNKY SNKRS</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/base.css">
+</head>
+<body>
+<div class="wrapper">
+  <div class="page-title" style="padding-top:120px">
+    <h1>INICIANDO <span>SESIÓN</span></h1>
+    <p id="estado">Conectando con Google…</p>
+  </div>
+</div>
+
+<!-- Esta página solo procesa el redirect de Supabase y redirige al perfil. -->
+<script src="/assets/auth.js"></script>
+<script>
+(async () => {
+  try {
+    if (window.CHKAuth) await window.CHKAuth.ready;
+    // Dar un momento a detectSessionInUrl para procesar el token/código.
+    let token = null;
+    for (let i = 0; i < 40 && !token; i++) {
+      token = window.CHKAuth ? await window.CHKAuth.getToken() : null;
+      if (!token) await new Promise(r => setTimeout(r, 100));
+    }
+  } catch {}
+  location.replace('/mi-perfil');
+})();
+</script>
+</body>
+</html>

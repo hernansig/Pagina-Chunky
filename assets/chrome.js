@@ -175,7 +175,15 @@
     .cg5{animation:crack-pulse 4.9s ease-in-out infinite 3.2s}`;
   document.head.appendChild(style);
 
-  function init() { inyectarFondo(); inyectarNav(); inyectarFooter(); inyectarCookies(); }
+  // Carga el módulo de auth (saldo de puntos / iniciar sesión en el header).
+  function cargarAuth() {
+    if (window.CHKAuth || document.querySelector('script[data-chk-auth]')) return;
+    const s = document.createElement('script');
+    s.src = '/assets/auth.js'; s.async = true; s.setAttribute('data-chk-auth', '1');
+    document.head.appendChild(s);
+  }
+
+  function init() { inyectarFondo(); inyectarNav(); inyectarFooter(); inyectarCookies(); cargarAuth(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

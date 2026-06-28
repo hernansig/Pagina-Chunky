@@ -74,6 +74,18 @@ export default async function handler(req, res) {
           .eq('estado', 'activa');
       }
 
+      // Asociar el pedido al usuario si su email coincide (compra anónima si no).
+      if (pedido.cliente_contacto && !pedido.usuario_id) {
+        try {
+          const { data: usuario } = await sb
+            .from('usuarios').select('id')
+            .eq('email', pedido.cliente_contacto).maybeSingle();
+          if (usuario) await sb.from('pedidos').update({ usuario_id: usuario.id }).eq('id', pedido.id);
+        } catch (e) {
+          console.warn('[webhook] no se pudo asociar usuario:', e.message);
+        }
+      }
+
       await notificarPagoConfirmado(pedido);
     } else if (estado === 'rejected' || estado === 'cancelled') {
       await sb.from('pedidos')

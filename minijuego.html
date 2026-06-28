@@ -8,26 +8,73 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .rank-row { display:flex; justify-content:space-between; gap:12px; font-size:14px; color:#cfc7b8; border-bottom:1px solid #1c1c1c; padding:8px 0; }
+    .rank-row .pos { font-family:'Bebas Neue',sans-serif; color:var(--red); letter-spacing:1px; }
+    .rank-row .pts { font-family:'Bebas Neue',sans-serif; color:var(--white); letter-spacing:1px; }
+  </style>
 </head>
 <body>
 <div class="wrapper">
   <div class="ticker-wrap" aria-hidden="true"><div class="ticker-track">
-    <span class="ticker-item">NUEVO JUEGO</span><span class="ticker-item">PRÓXIMAMENTE</span>
-    <span class="ticker-item">NUEVO JUEGO</span><span class="ticker-item">PRÓXIMAMENTE</span>
-    <span class="ticker-item">NUEVO JUEGO</span><span class="ticker-item">PRÓXIMAMENTE</span>
+    <span class="ticker-item">SOBREVIVÍ EN MVD</span><span class="ticker-item">SUMÁ PUNTOS</span>
+    <span class="ticker-item">SOBREVIVÍ EN MVD</span><span class="ticker-item">SUMÁ PUNTOS</span>
+    <span class="ticker-item">SOBREVIVÍ EN MVD</span><span class="ticker-item">SUMÁ PUNTOS</span>
   </div></div>
-  <div class="page-title"><h1>MINI<span>JUEGO</span></h1><p>Sobreviví, sumá puntos, ganá premios</p></div>
+  <div class="page-title"><h1>MINI<span>JUEGO</span></h1><p>Sobreviví, juntá monedas, canjealas en la ruleta</p></div>
+
   <main class="catalog narrow" style="text-align:center">
     <div class="info-box" style="text-align:left">
-      <h3>En construcción</h3>
-      
-        
-      
-      
+      <h3>Cómo funciona</h3>
+      <ul>
+        <li>Esquivá obstáculos y juntá monedas en las calles de Montevideo.</li>
+        <li>Cada moneda recogida suma <b>1 punto</b> a tu saldo.</li>
+        <li>Canjeá tus puntos por premios en la ruleta.</li>
+        <li>Necesitás iniciar sesión con Google para jugar y guardar tus puntos.</li>
+      </ul>
     </div>
-    <a class="btn big" href="/" style="max-width:280px;margin:20px auto 0"><span>Volver al catálogo</span></a>
+
+    <div id="cta" style="margin:24px 0"><div class="cargando">cargando...</div></div>
+
+    <section class="catalog narrow" style="padding:0">
+      <div class="section-header"><span class="section-label">TOP <span>SEMANAL</span></span></div>
+      <div id="ranking"><div class="cargando">cargando ranking...</div></div>
+    </section>
   </main>
 </div>
+
 <script src="/assets/chrome.js"></script>
+<script>
+async function authReady() {
+  for (let i = 0; i < 120 && !window.CHKAuth; i++) await new Promise(r => setTimeout(r, 50));
+  if (window.CHKAuth) await window.CHKAuth.ready;
+  return window.CHKAuth;
+}
+function esc(s = '') { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+(async () => {
+  const A = await authReady();
+  const u = A ? await A.me() : null;
+  const cta = document.getElementById('cta');
+  if (u) {
+    cta.innerHTML = `<a class="btn big" href="/minijuego/jugar" style="max-width:300px;margin:0 auto"><span>Jugar ahora</span></a>`;
+  } else {
+    cta.innerHTML = `
+      <p style="color:#bdb5a6;font-size:14px;margin-bottom:14px">Iniciá sesión para jugar y acumular puntos.</p>
+      <a class="btn big" href="/mi-perfil" style="max-width:320px;margin:0 auto"><span>Iniciá sesión para jugar</span></a>`;
+  }
+
+  // Ranking semanal (público).
+  try {
+    const { top } = await fetch('/api/app/ranking').then(r => r.json());
+    const el = document.getElementById('ranking');
+    el.innerHTML = (top && top.length)
+      ? top.map(r => `<div class="rank-row"><span class="pos">#${r.pos} ${esc(r.alias)}</span><span class="pts">${Number(r.puntaje).toLocaleString('es-UY')} pts</span></div>`).join('')
+      : '<p style="color:var(--muted);font-size:14px">Todavía no hay puntajes esta semana. ¡Sé el primero!</p>';
+  } catch {
+    document.getElementById('ranking').innerHTML = '<p style="color:var(--muted);font-size:14px">No se pudo cargar el ranking.</p>';
+  }
+})();
+</script>
 </body>
 </html>

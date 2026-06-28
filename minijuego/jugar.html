@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>CHUNKY RUNNER — MVD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    #salir { position:absolute; top:10px; left:12px; z-index:5; font-family:'Press Start 2P',monospace; font-size:10px; color:#9a86c0; text-decoration:none; background:rgba(0,0,0,0.4); border:1px solid #2a1414; padding:6px 9px; }
+    #salir:hover { color:#cc0000; }
+    #saveStatus { font-size:clamp(8px,1.7vw,11px); color:#9bff7a; letter-spacing:1px; min-height:14px; }
+    #authGate { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:6; font-family:'Press Start 2P',monospace; color:#e8e0d0; font-size:11px; background:#050505; }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="540"></canvas>
+  <div id="grain"></div>
+  <a id="salir" href="/minijuego">← salir</a>
+  <button id="muteBtn" title="Silenciar (M)">♪</button>
+  <div id="authGate">verificando sesión…</div>
+
+  <!-- INICIO -->
+  <div id="startScreen" class="screen hidden">
+    <div class="logo"><span class="l1">CHUNKY</span><span class="l2">RUNNER</span></div>
+    <div class="sub">sobrevivís en las calles de mvd</div>
+    <button id="playBtn" class="btn">JUGAR</button>
+    <div class="help">← →  moverte entre carriles<br>↑ / W / espacio  saltar<br>(también A / D)</div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="overScreen" class="screen hidden">
+    <div class="go">GAME OVER</div>
+    <div class="score-break">
+      <span class="total" id="goTotal">0</span><span class="c">monedas</span>
+    </div>
+    <div class="sub-dist">distancia <b id="goDist">0</b> m · para el ranking mensual</div>
+    <div id="saveStatus"></div>
+    <div class="board">
+      <div class="board-title">TOP 10 — SEMANAL</div>
+      <ol id="boardList"></ol>
+    </div>
+    <button id="againBtn" class="btn">JUGAR DE NUEVO</button>
+  </div>
+</div>
+
+<!-- módulos del juego (orden importa: config primero) -->
+<script src="js/config.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/background.js"></script>
+<script src="js/sprites.js"></script>
+<script src="js/leaderboard.js"></script>
+<script src="js/game.js"></script>
+<script src="js/input.js"></script>
+<!-- auth del sitio (sesión Google) -->
+<script src="/assets/auth.js"></script>
+<script>
+// Guard: solo se puede jugar con sesión. Si no hay, redirige a /mi-perfil.
+(async function () {
+  for (let i = 0; i < 120 && !window.CHKAuth; i++) await new Promise(r => setTimeout(r, 50));
+  if (window.CHKAuth) await window.CHKAuth.ready;
+  if (!window.CHKAuth || !(await window.CHKAuth.requireAuth())) return;   // redirige si no hay sesión
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('startScreen').classList.remove('hidden');
+  // sesión OK → bootear el juego
+  const s = document.createElement('script'); s.src = 'js/main.js'; document.body.appendChild(s);
+})();
+</script>
+</body>
+</html>

@@ -8,27 +8,141 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/base.css">
+  <style>
+    .ruleta-wrap { position:relative; width:340px; max-width:88vw; margin:10px auto 0; }
+    .ruleta-wrap canvas { width:100%; height:auto; display:block; transform:rotate(0deg); transition:transform 4s cubic-bezier(.17,.67,.2,1); }
+    .ruleta-pin { position:absolute; top:-6px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:14px solid transparent; border-right:14px solid transparent; border-top:26px solid var(--red); z-index:3; filter:drop-shadow(0 0 4px rgba(204,0,0,0.7)); }
+    .ruleta-centro { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:46px; height:46px; border-radius:50%; background:var(--carbon); border:2px solid var(--red); z-index:2; }
+    .saldo-line { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; color:var(--bone); margin:6px 0; }
+    .saldo-line b { color:var(--red); }
+    .costo-line { font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+    .resultado { min-height:30px; margin-top:16px; font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:2px; }
+    .resultado.win { color:#8fbf6f; } .resultado.none { color:var(--muted); } .resultado.spin { color:var(--bone); }
+  </style>
 </head>
 <body>
 <div class="wrapper">
   <div class="ticker-wrap" aria-hidden="true"><div class="ticker-track">
-    <span class="ticker-item">GIRÁ CON TUS PUNTOS</span><span class="ticker-item">PRÓXIMAMENTE</span>
-    <span class="ticker-item">GIRÁ CON TUS PUNTOS</span><span class="ticker-item">PRÓXIMAMENTE</span>
-    <span class="ticker-item">GIRÁ CON TUS PUNTOS</span><span class="ticker-item">PRÓXIMAMENTE</span>
+    <span class="ticker-item">GIRÁ CON TUS PUNTOS</span><span class="ticker-item">LA RULETA</span>
+    <span class="ticker-item">GIRÁ CON TUS PUNTOS</span><span class="ticker-item">LA RULETA</span>
+    <span class="ticker-item">GIRÁ CON TUS PUNTOS</span><span class="ticker-item">LA RULETA</span>
   </div></div>
   <div class="page-title"><h1>LA <span>RULETA</span></h1><p>Canjeá puntos del minijuego por premios</p></div>
+
   <main class="catalog narrow" style="text-align:center">
-    <div class="info-box" style="text-align:left">
-      <h3>En construcción</h3>
-      <ul>
-        <li>Solo se gira con puntos ganados en el minijuego.</li>
-        
-        <li>¡Podes ganar premios!</li>
-      </ul>
+    <div id="estado"><div class="cargando">cargando...</div></div>
+
+    <div id="juego" style="display:none">
+      <div class="saldo-line">Saldo: <b id="saldo">0</b> pts</div>
+      <div class="costo-line" id="costo-line">Cada giro cuesta 1700 puntos</div>
+
+      <div class="ruleta-wrap">
+        <div class="ruleta-pin"></div>
+        <canvas id="rueda" width="600" height="600"></canvas>
+        <div class="ruleta-centro"></div>
+      </div>
+
+      <div class="resultado" id="resultado"></div>
+      <button class="btn big" id="girar" style="max-width:280px;margin:14px auto 0"><span>Girar (1700 pts)</span></button>
+      <p style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-top:14px">El descuento y el resultado se calculan en el servidor. Los premios los coordinamos por Instagram.</p>
     </div>
-    <a class="btn big" href="/minijuego" style="max-width:280px;margin:20px auto 0"><span>Ir al minijuego</span></a>
   </main>
 </div>
+
 <script src="/assets/chrome.js"></script>
+<script>
+const COSTO = 1700;
+// Mismo orden que el backend (WHEEL en api/app/[action].js).
+const WHEEL = ['nada','otro_giro','nada','envio_gratis','nada','otro_giro','nada','zapas_gratis','nada','envio_gratis'];
+const LABELS = { nada:'OTRA VEZ', otro_giro:'OTRO GIRO', envio_gratis:'ENVÍO GRATIS', zapas_gratis:'ZAPAS GRATIS' };
+const COLORS = { nada:'#1a1010', otro_giro:'#5a0e0e', envio_gratis:'#8b0000', zapas_gratis:'#cc0000' };
+
+async function authReady() {
+  for (let i = 0; i < 120 && !window.CHKAuth; i++) await new Promise(r => setTimeout(r, 50));
+  if (window.CHKAuth) await window.CHKAuth.ready;
+  return window.CHKAuth;
+}
+
+function dibujarRueda() {
+  const c = document.getElementById('rueda'), ctx = c.getContext('2d');
+  const N = WHEEL.length, R = 300, cx = 300, cy = 300, paso = (Math.PI * 2) / N;
+  ctx.clearRect(0, 0, 600, 600);
+  for (let i = 0; i < N; i++) {
+    const a0 = -Math.PI / 2 + i * paso, a1 = a0 + paso;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a1); ctx.closePath();
+    ctx.fillStyle = COLORS[WHEEL[i]]; ctx.fill();
+    ctx.strokeStyle = '#0a0a0a'; ctx.lineWidth = 3; ctx.stroke();
+    // etiqueta
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(a0 + paso / 2);
+    ctx.fillStyle = WHEEL[i] === 'nada' ? '#7a6a6a' : '#e8e0d0';
+    ctx.font = '700 26px Oswald, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(LABELS[WHEEL[i]], R - 18, 0);
+    ctx.restore();
+  }
+}
+
+let rot = 0, girando = false;
+
+function animarHacia(seccion) {
+  const paso = 360 / WHEEL.length;
+  const centro = seccion * paso + paso / 2;            // ángulo del centro de la sección
+  const jitter = (Math.random() - 0.5) * (paso - 8);
+  const desiredMod = ((360 - (centro % 360)) % 360 + jitter + 360) % 360;
+  let base = rot - (rot % 360) + desiredMod;
+  if (base <= rot) base += 360;
+  rot = base + 360 * 5;                                 // 5 vueltas extra
+  document.getElementById('rueda').style.transform = `rotate(${rot}deg)`;
+}
+
+function setSaldo(pts, giros) {
+  document.getElementById('saldo').textContent = Number(pts).toLocaleString('es-UY');
+  const cl = document.getElementById('costo-line');
+  cl.textContent = giros > 0 ? `Tenés ${giros} giro(s) gratis` : `Cada giro cuesta ${COSTO} puntos`;
+  const btn = document.getElementById('girar');
+  const puede = giros > 0 || pts >= COSTO;
+  btn.disabled = !puede;
+  btn.querySelector('span').textContent = giros > 0 ? 'Girar (gratis)' : `Girar (${COSTO} pts)`;
+}
+
+(async () => {
+  const A = await authReady();
+  if (!A || !(await A.requireAuth())) return;           // redirige si no hay sesión
+  const u = await A.me(true);
+  document.getElementById('estado').style.display = 'none';
+  document.getElementById('juego').style.display = '';
+  dibujarRueda();
+  setSaldo(u.puntos_disponibles || 0, u.giros_gratis || 0);
+
+  const btn = document.getElementById('girar');
+  const res = document.getElementById('resultado');
+
+  btn.addEventListener('click', async () => {
+    if (girando) return;
+    girando = true; btn.disabled = true; res.className = 'resultado spin'; res.textContent = 'Girando...';
+    try {
+      const token = await A.getToken();
+      const data = await fetch('/api/app/ruleta-girar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      }).then(r => r.json().then(j => ({ ok: r.ok, j })));
+      if (!data.ok) { res.className = 'resultado none'; res.textContent = data.j.error || 'No se pudo girar.'; girando = false; setSaldo(u.puntos_disponibles, u.giros_gratis); return; }
+      const d = data.j;
+      animarHacia(d.seccion);
+      setTimeout(() => {
+        const gano = d.resultado === 'envio_gratis' || d.resultado === 'zapas_gratis';
+        res.className = 'resultado ' + (gano ? 'win' : d.resultado === 'otro_giro' ? 'spin' : 'none');
+        res.textContent = d.etiqueta;
+        u.puntos_disponibles = d.puntos_disponibles; u.giros_gratis = d.giros_gratis;
+        setSaldo(d.puntos_disponibles, d.giros_gratis);
+        if (window.CHKAuth) window.CHKAuth.me(true).then(() => window.CHKAuth.mountHeader());
+        girando = false;
+      }, 4200);
+    } catch (e) {
+      res.className = 'resultado none'; res.textContent = 'Error de red.'; girando = false;
+      setSaldo(u.puntos_disponibles, u.giros_gratis);
+    }
+  });
+})();
+</script>
 </body>
 </html>
