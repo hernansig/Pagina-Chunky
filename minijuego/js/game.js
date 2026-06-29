@@ -181,13 +181,15 @@
       if (p.shield) { p.shield = false; p.invuln = 1.0; g.shake = 0.25; o.z = -1; burst(K.PLAYER_X, groundY(K.PLAYER_Z) - 70, BONE, 14); banner('¡ESCUDO ROTO!', BONE); Audio.sfx.hit(); }
       else { endGame(); return; }
     }
-    // Recolección por VENTANA: mientras la moneda está en [REMOVE_Z, COLLECT_Z]
-    // se chequea cada frame; se toma apenas el carril+salto coinciden. Así el
-    // jugador tiene toda la ventana para alinearse (antes se evaluaba una sola
-    // vez en un plano lejano y "algunas se guardaban y otras no").
+    // Recolección por POSICIÓN VISUAL del jugador. p.px es la posición continua
+    // del avatar (no el carril discreto), así agarra las monedas por las que
+    // realmente pasa por encima, incluso mientras se desliza entre carriles —
+    // esa era la causa de "paso por arriba y no la agarra". Ventana en z ancha
+    // + salto tolerante para que tampoco se escapen a alta velocidad.
+    const contLane = p.px + 1;                          // 0..2 continuo (carril visual)
     for (const c of g.coinsArr) {
       if (c.got || c.z > K.COLLECT_Z) continue;
-      if (c.lane === p.lane && p.jumpOff >= Math.min(c.h - 28, 42)) {   // salto tolerante (no hace falta el pico)
+      if (Math.abs(contLane - c.lane) < 0.6 && p.jumpOff >= Math.min(c.h - 28, 42)) {
         c.got = true; g.coins++; g.coinFlash = 1;
         const cx = sx(c.lane - 1, c.z, g.cam), cy = groundY(c.z) - (28 + c.h) * pp(c.z);
         burst(cx, cy, RED, 6); pop(cx, cy - 6, '+1', BONE); Audio.sfx.coin();
@@ -195,7 +197,7 @@
     }
     for (const u of g.powerups) {
       if (u.got || u.z > K.COLLECT_Z) continue;
-      if (u.lane === p.lane) { u.got = true; burst(sx(u.lane - 1, u.z, g.cam), groundY(u.z) - 46 * pp(u.z), BONE, 12); applyPowerup(); }
+      if (Math.abs(contLane - u.lane) < 0.6) { u.got = true; burst(sx(u.lane - 1, u.z, g.cam), groundY(u.z) - 46 * pp(u.z), BONE, 12); applyPowerup(); }
     }
 
     // limpieza

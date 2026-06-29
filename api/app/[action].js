@@ -123,19 +123,18 @@ async function ruletaGirar(req, res) {
   if (!u) return fail(res, 401, 'No autenticado.');
   const sb = supa();
 
-  // Cobro: usar un giro gratis si hay; si no, descontar el costo (atómico).
-  let usoGiroGratis = false;
-  if (u.giros_gratis > 0) {
-    const { error } = await sb.from('usuarios')
-      .update({ giros_gratis: u.giros_gratis - 1 }).eq('id', u.id).gt('giros_gratis', 0);
-    if (error) throw error;
-    usoGiroGratis = true;
-  } else {
-    const { data: ok } = await sb.rpc('gastar_puntos', { p_usuario_id: u.id, p_costo: RULETA_COSTO });
-    if (!ok) return fail(res, 409, `Necesitás ${RULETA_COSTO} puntos para girar.`);
-  }
+  // Estado fresco (evita pisar valores con un snapshot viejo).
+  const { data: cur } = await sb.from('usuarios')
+    .select('puntos_disponibles,giros_gratis').eq('id', u.id).maybeSingle();
+  let pts = cur?.puntos_disponibles || 0;
+  let giros = cur?.giros_gratis || 0;
 
-  // Sorteo del resultado (ponderado) y elección de una sección que coincida.
+  // Cobro: si hay giro gratis se usa; si no, se descuenta el costo.
+  if (giros > 0) giros -= 1;
+  else if (pts >= RULETA_COSTO) pts -= RULETA_COSTO;
+  else return fail(res, 409, `Necesitás ${RULETA_COSTO} puntos para girar.`);
+
+  // Sorteo ponderado + sección de la rueda que coincida.
   const resultado = sortearPonderado(PESOS);
   const indices = WHEEL.map((t, i) => (t === resultado ? i : -1)).filter((i) => i >= 0);
   const seccion = indices[Math.floor(Math.random() * indices.length)];
@@ -143,7 +142,7 @@ async function ruletaGirar(req, res) {
   // Efectos del premio.
   let premio = null;
   if (resultado === 'otro_giro') {
-    await sb.from('usuarios').update({ giros_gratis: u.giros_gratis + (usoGiroGratis ? 0 : 1) }).eq('id', u.id);
+    giros += 1;                       // "otro giro" SIEMPRE habilita un giro extra
     premio = 'otro_giro';
   } else if (resultado === 'envio_gratis' || resultado === 'zapas_gratis') {
     await sb.from('premios_ruleta').insert({ usuario_id: u.id, tipo: resultado });
@@ -151,22 +150,17 @@ async function ruletaGirar(req, res) {
     avisarPremio(u, resultado).catch((e) => console.error('[ruleta mail]', e.message));
   }
 
-  // Saldo final.
-  const { data: actual } = await sb.from('usuarios')
-    .select('puntos_disponibles,giros_gratis').eq('id', u.id).maybeSingle();
+  // Persistir el estado final de una sola vez.
+  await sb.from('usuarios').update({ puntos_disponibles: pts, giros_gratis: giros }).eq('id', u.id);
 
   json(res, 200, {
-    ok: true,
-    resultado, seccion,
-    etiqueta: ETIQUETAS[resultado],
-    premio,
-    puntos_disponibles: actual?.puntos_disponibles ?? 0,
-    giros_gratis: actual?.giros_gratis ?? 0,
+    ok: true, resultado, seccion, etiqueta: ETIQUETAS[resultado], premio,
+    puntos_disponibles: pts, giros_gratis: giros,
   });
 }
 
 const ETIQUETAS = {
-  nada: '¡Intentá de nuevo!',
+  nada: 'Chunky Bag',
   otro_giro: '¡Otro giro!',
   envio_gratis: 'Envío gratis en tu próximo pedido',
   zapas_gratis: '¡Par de zapas GRATIS!',

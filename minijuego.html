@@ -27,17 +27,17 @@
     /* Features */
     .mj-feats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:30px; }
     @media (max-width:460px){ .mj-feats{ grid-template-columns:1fr; } }
-    .mj-feat { border:1px solid #1c1c1c; border-top:2px solid var(--bordo); background:var(--carbon); padding:16px 12px; text-align:center; }
-    .mj-feat .ic { font-size:26px; line-height:1; }
-    .mj-feat div:last-child { font-family:'Oswald',sans-serif; font-size:12px; line-height:1.5; color:#bdb5a6; letter-spacing:1px; margin-top:8px; text-transform:uppercase; }
+    .mj-feat { border:1px solid #1c1c1c; border-top:2px solid var(--bordo); background:var(--carbon); padding:18px 12px; text-align:center; }
+    .mj-feat .k { font-family:'Permanent Marker',cursive; font-size:30px; color:var(--red); line-height:1; }
+    .mj-feat .t { font-family:'Oswald',sans-serif; font-size:11px; line-height:1.5; color:#bdb5a6; letter-spacing:2px; margin-top:8px; text-transform:uppercase; }
     /* Ranking */
     .rank-row { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:14px; color:#cfc7b8; border-bottom:1px solid #1c1c1c; padding:10px 6px; }
-    .rank-row .who { display:flex; align-items:center; gap:10px; }
-    .rank-row .medal { font-size:18px; width:26px; text-align:center; }
-    .rank-row .pos { font-family:'Bebas Neue',sans-serif; color:var(--red); letter-spacing:1px; width:26px; text-align:center; }
+    .rank-row .who { display:flex; align-items:center; gap:12px; }
+    .rank-row .pos { font-family:'Bebas Neue',sans-serif; letter-spacing:1px; width:34px; text-align:center; color:var(--muted); font-size:16px; }
     .rank-row .alias { font-family:'Bebas Neue',sans-serif; letter-spacing:1px; color:var(--white); font-size:16px; }
     .rank-row .pts { font-family:'Bebas Neue',sans-serif; color:var(--red); letter-spacing:1px; font-size:16px; }
     .rank-row.top { background:rgba(204,0,0,0.06); border-bottom-color:var(--bordo); }
+    .rank-row .pos.p1 { color:#e8c96a; } .rank-row .pos.p2 { color:#cfcfcf; } .rank-row .pos.p3 { color:#c98a4a; }
   </style>
 </head>
 <body>
@@ -58,9 +58,9 @@
     </div>
 
     <div class="mj-feats">
-      <div class="mj-feat"><div class="ic">🏃</div><div>Endless runner<br>3 carriles</div></div>
-      <div class="mj-feat"><div class="ic">🪙</div><div>Cada moneda<br>= 1 punto</div></div>
-      <div class="mj-feat"><div class="ic">🎁</div><div>Canjealos<br>en la ruleta</div></div>
+      <div class="mj-feat"><div class="k">3</div><div class="t">carriles<br>endless runner</div></div>
+      <div class="mj-feat"><div class="k">+1</div><div class="t">punto<br>por moneda</div></div>
+      <div class="mj-feat"><div class="k">★</div><div class="t">canjealos<br>en la ruleta</div></div>
     </div>
 
     <section>
@@ -78,14 +78,13 @@ async function authReady() {
   return window.CHKAuth;
 }
 function esc(s = '') { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
-const MEDALS = ['🥇', '🥈', '🥉'];
 
 (async () => {
   const A = await authReady();
   const u = A ? await A.me() : null;
   const cta = document.getElementById('cta');
   if (u) {
-    cta.innerHTML = `<a class="btn big" href="/minijuego/jugar" style="max-width:320px;width:100%"><span>▶ Jugar ahora</span></a>`;
+    cta.innerHTML = `<a class="btn big" href="/minijuego/jugar" style="max-width:320px;width:100%"><span>Jugar ahora</span></a>`;
   } else {
     cta.innerHTML = `<a class="btn big" href="/mi-perfil" style="max-width:340px;width:100%"><span>Iniciá sesión para jugar</span></a>`;
   }
@@ -97,12 +96,12 @@ const MEDALS = ['🥇', '🥈', '🥉'];
       ? top.map(r => `
         <div class="rank-row ${r.pos <= 3 ? 'top' : ''}">
           <div class="who">
-            <span class="${r.pos <= 3 ? 'medal' : 'pos'}">${r.pos <= 3 ? MEDALS[r.pos - 1] : '#' + r.pos}</span>
+            <span class="pos ${r.pos <= 3 ? 'p' + r.pos : ''}">${r.pos}º</span>
             <span class="alias">${esc(r.alias)}</span>
           </div>
           <span class="pts">${Number(r.puntaje).toLocaleString('es-UY')}</span>
         </div>`).join('')
-      : '<p style="color:var(--muted);font-size:14px;text-align:center;padding:10px">Todavía no hay puntajes esta semana. ¡Sé el primero! 🪙</p>';
+      : '<p style="color:var(--muted);font-size:14px;text-align:center;padding:10px">Todavía no hay puntajes esta semana. ¡Sé el primero!</p>';
   } catch {
     document.getElementById('ranking').innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">No se pudo cargar el ranking.</p>';
   }

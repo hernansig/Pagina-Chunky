@@ -9,7 +9,13 @@
     const canvas = document.getElementById('game');
     const muteBtn = document.getElementById('muteBtn');
 
-    document.getElementById('playBtn').addEventListener('click', () => Game.start());
+    // En móvil: pantalla completa + bloquear orientación al empezar a jugar.
+    function enterImmersive() {
+      if (!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches)) return;
+      try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
+      try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+    }
+    document.getElementById('playBtn').addEventListener('click', () => { enterImmersive(); Game.start(); });
     document.getElementById('againBtn').addEventListener('click', () => Game.start());
 
     function toggleMute() {
@@ -38,6 +44,7 @@
     // ── táctil (swipe / tap) ──
     let tsx = 0, tsy = 0;
     canvas.addEventListener('touchstart', e => { const t = e.changedTouches[0]; tsx = t.clientX; tsy = t.clientY; Audio.resume(); }, { passive: true });
+    canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });   // que no se deslice la página
     canvas.addEventListener('touchend', e => {
       const st = Game.getState();
       if (st !== 'playing') { if (st === 'start') Game.start(); return; }
