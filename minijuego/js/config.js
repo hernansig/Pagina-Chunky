@@ -18,7 +18,7 @@ window.CR = window.CR || {};
     PLAYER_X: W / 2,
     PLAYER_Z: 0.15,       // profundidad de dibujo del héroe
     HIT_Z: 0.2,           // plano donde se evalúa el choque
-    COLLECT_Z: 0.42,      // plano donde se recolectan monedas/power-ups
+    COLLECT_Z: 0.6,       // ventana de recolección de monedas/power-ups (ancha = más frames para alinearse)
     REMOVE_Z: 0.06,
     OBJ_SCALE: 1.7, PLAYER_SCALE: 1.85,
     BASE_Z: 3.2, CAP_Z: 9.5, MULT_MAX: 1.5,  // velocidad en z/seg (arranca y sube más rápido)

@@ -17,7 +17,7 @@
 
     let last = performance.now();
     function frame(ts) {
-      const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
+      const dt = Math.min(0.034, (ts - last) / 1000 || 0); last = ts;
       CR.Audio.tick();
       CR.Background.update(dt);
       CR.Game.tick(dt);

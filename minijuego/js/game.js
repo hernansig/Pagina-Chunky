@@ -187,7 +187,7 @@
     // vez en un plano lejano y "algunas se guardaban y otras no").
     for (const c of g.coinsArr) {
       if (c.got || c.z > K.COLLECT_Z) continue;
-      if (c.lane === p.lane && p.jumpOff >= c.h - 30) {
+      if (c.lane === p.lane && p.jumpOff >= Math.min(c.h - 28, 42)) {   // salto tolerante (no hace falta el pico)
         c.got = true; g.coins++; g.coinFlash = 1;
         const cx = sx(c.lane - 1, c.z, g.cam), cy = groundY(c.z) - (28 + c.h) * pp(c.z);
         burst(cx, cy, RED, 6); pop(cx, cy - 6, '+1', BONE); Audio.sfx.coin();

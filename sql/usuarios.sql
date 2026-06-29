@@ -1,43 +1,45 @@
 -- ════════════════════════════════════════════════════════════════
 --  CHUNKY SNKRS — usuarios, puntos, ranking y ruleta
---  Correr este script UNA vez en Supabase → SQL Editor.
---  Idempotente: usa IF NOT EXISTS / CREATE OR REPLACE.
+--  Correr en Supabase → SQL Editor. Idempotente y a prueba de tablas
+--  preexistentes: crea lo que falte y agrega columnas faltantes.
 -- ════════════════════════════════════════════════════════════════
 
--- ── Tabla usuarios ──────────────────────────────────────────────
--- id == auth.users.id. Se crea sola al primer login (trigger de abajo).
+-- ── Tabla usuarios (id == auth.users.id) ────────────────────────
 create table if not exists public.usuarios (
-  id                  uuid primary key references auth.users(id) on delete cascade,
-  email               text unique,
-  alias               text,
-  nombre              text,
-  avatar_url          text,
-  puntos_disponibles  integer not null default 0,
-  puntos_totales      integer not null default 0,
-  giros_gratis        integer not null default 0,
-  created_at          timestamptz not null default now()
+  id uuid primary key references auth.users(id) on delete cascade
 );
+alter table public.usuarios
+  add column if not exists email              text,
+  add column if not exists alias              text,
+  add column if not exists nombre             text,
+  add column if not exists avatar_url         text,
+  add column if not exists puntos_disponibles integer not null default 0,
+  add column if not exists puntos_totales     integer not null default 0,
+  add column if not exists giros_gratis       integer not null default 0,
+  add column if not exists created_at         timestamptz not null default now();
 
 -- ── Puntajes del minijuego (ranking semanal/mensual) ────────────
 create table if not exists public.puntajes_mensuales (
-  id          bigint generated always as identity primary key,
-  usuario_id  uuid not null references public.usuarios(id) on delete cascade,
-  alias       text,
-  puntaje     integer not null default 0,   -- = monedas recogidas
-  metros      integer not null default 0,   -- distancia (para ranking de distancia)
-  creado_en   timestamptz not null default now()
+  id bigint generated always as identity primary key
 );
-create index if not exists idx_puntajes_creado on public.puntajes_mensuales (creado_en);
+alter table public.puntajes_mensuales
+  add column if not exists usuario_id uuid references public.usuarios(id) on delete cascade,
+  add column if not exists alias      text,
+  add column if not exists puntaje    integer not null default 0,
+  add column if not exists metros     integer not null default 0,
+  add column if not exists creado_en  timestamptz not null default now();
+create index if not exists idx_puntajes_creado  on public.puntajes_mensuales (creado_en);
 create index if not exists idx_puntajes_usuario on public.puntajes_mensuales (usuario_id);
 
 -- ── Premios ganados en la ruleta (los gestiona el dueño a mano) ─
 create table if not exists public.premios_ruleta (
-  id          bigint generated always as identity primary key,
-  usuario_id  uuid not null references public.usuarios(id) on delete cascade,
-  tipo        text not null,                 -- 'envio_gratis' | 'zapas_gratis'
-  estado      text not null default 'pendiente',
-  creado_en   timestamptz not null default now()
+  id bigint generated always as identity primary key
 );
+alter table public.premios_ruleta
+  add column if not exists usuario_id uuid references public.usuarios(id) on delete cascade,
+  add column if not exists tipo       text,                 -- 'envio_gratis' | 'zapas_gratis'
+  add column if not exists estado     text not null default 'pendiente',
+  add column if not exists creado_en  timestamptz not null default now();
 
 -- ── Asociar pedidos al usuario (compra anónima sigue válida) ────
 alter table public.pedidos add column if not exists usuario_id uuid references public.usuarios(id);
@@ -103,7 +105,7 @@ end;
 $$;
 
 -- ── RLS: todo se accede vía service_role en el backend ──────────
--- Habilitamos RLS sin políticas permisivas → bloquea anon/authenticated.
+-- RLS habilitado sin políticas permisivas → bloquea anon/authenticated.
 -- El service_role (Vercel Functions) ignora RLS.
 alter table public.usuarios            enable row level security;
 alter table public.puntajes_mensuales  enable row level security;

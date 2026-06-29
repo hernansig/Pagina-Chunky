@@ -7,7 +7,7 @@
   if (window.CHKAuth) return;                  // evitar doble carga
 
   const SB_CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
-  let client = null, _usuario = null, _checked = false;
+  let client = null, _usuario = null, _mePromise = null;
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -70,16 +70,20 @@
   }
 
   // Devuelve la fila de `usuarios` (con puntos) o null si no hay sesión.
+  // Cachea la PROMESA (no solo el resultado) para que llamadas concurrentes
+  // esperen el mismo fetch y no devuelvan null antes de tiempo.
   async function me(force) {
-    if (_checked && !force) return _usuario;
-    _checked = true;
-    const token = await getToken();
-    if (!token) { _usuario = null; return null; }
-    try {
-      const { usuario } = await api('me');
-      _usuario = usuario;
-    } catch { _usuario = null; }
-    return _usuario;
+    if (force) _mePromise = null;
+    if (!_mePromise) {
+      _mePromise = (async () => {
+        const token = await getToken();
+        if (!token) { _usuario = null; return null; }
+        try { const { usuario } = await api('me'); _usuario = usuario; }
+        catch { _usuario = null; }
+        return _usuario;
+      })();
+    }
+    return _mePromise;
   }
 
   // Para páginas protegidas (minijuego/jugar, ruleta). true si hay sesión.
@@ -102,8 +106,7 @@
       nav.appendChild(slot);
     }
     if (_usuario) {
-      const pts = Number(_usuario.puntos_disponibles || 0).toLocaleString('es-UY');
-      slot.innerHTML = `<a class="pts-pill" href="/mi-perfil" title="Mi perfil">⭐ <b>${pts}</b> pts</a>`;
+      slot.innerHTML = `<a class="login-link" href="/mi-perfil">Mi perfil</a>`;
     } else {
       slot.innerHTML = `<a class="login-link" href="/mi-perfil">Iniciar sesión</a>`;
     }

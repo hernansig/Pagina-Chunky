@@ -9,9 +9,35 @@
   <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/base.css">
   <style>
-    .rank-row { display:flex; justify-content:space-between; gap:12px; font-size:14px; color:#cfc7b8; border-bottom:1px solid #1c1c1c; padding:8px 0; }
-    .rank-row .pos { font-family:'Bebas Neue',sans-serif; color:var(--red); letter-spacing:1px; }
-    .rank-row .pts { font-family:'Bebas Neue',sans-serif; color:var(--white); letter-spacing:1px; }
+    /* HERO del juego */
+    .mj-hero {
+      position:relative; overflow:hidden; text-align:center;
+      border:1px solid var(--red); background:linear-gradient(180deg, rgba(204,0,0,0.10), rgba(8,8,8,0.6) 60%), var(--carbon);
+      padding:42px 22px 36px; margin-bottom:26px;
+      box-shadow:0 0 36px rgba(204,0,0,0.18), inset 0 0 40px rgba(0,0,0,0.5);
+    }
+    .mj-hero::before { content:''; position:absolute; left:0; right:0; top:0; height:2px; background:linear-gradient(90deg, transparent, var(--red), transparent); }
+    .mj-hero::after { content:''; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,0.10) 3px 4px); }
+    .mj-glow { position:absolute; width:340px; height:340px; left:50%; top:30%; transform:translate(-50%,-50%); background:radial-gradient(circle, rgba(204,0,0,0.28), transparent 70%); filter:blur(6px); animation:mj-pulse 3.2s ease-in-out infinite; }
+    @keyframes mj-pulse { 0%,100%{opacity:.5} 50%{opacity:.9} }
+    .mj-logo { position:relative; font-family:'Permanent Marker',cursive; font-size:clamp(34px,9vw,62px); line-height:.9; color:var(--white); letter-spacing:-1px; text-shadow:3px 3px 0 var(--deep-red), 0 0 22px rgba(204,0,0,0.5); }
+    .mj-logo span { color:var(--red); display:block; }
+    .mj-sub { position:relative; font-family:'Bebas Neue',sans-serif; font-size:clamp(12px,2.6vw,16px); letter-spacing:4px; text-transform:uppercase; color:#bdb5a6; margin-top:14px; }
+    .mj-cta { position:relative; margin-top:26px; min-height:54px; display:flex; justify-content:center; }
+    /* Features */
+    .mj-feats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:30px; }
+    @media (max-width:460px){ .mj-feats{ grid-template-columns:1fr; } }
+    .mj-feat { border:1px solid #1c1c1c; border-top:2px solid var(--bordo); background:var(--carbon); padding:16px 12px; text-align:center; }
+    .mj-feat .ic { font-size:26px; line-height:1; }
+    .mj-feat div:last-child { font-family:'Oswald',sans-serif; font-size:12px; line-height:1.5; color:#bdb5a6; letter-spacing:1px; margin-top:8px; text-transform:uppercase; }
+    /* Ranking */
+    .rank-row { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:14px; color:#cfc7b8; border-bottom:1px solid #1c1c1c; padding:10px 6px; }
+    .rank-row .who { display:flex; align-items:center; gap:10px; }
+    .rank-row .medal { font-size:18px; width:26px; text-align:center; }
+    .rank-row .pos { font-family:'Bebas Neue',sans-serif; color:var(--red); letter-spacing:1px; width:26px; text-align:center; }
+    .rank-row .alias { font-family:'Bebas Neue',sans-serif; letter-spacing:1px; color:var(--white); font-size:16px; }
+    .rank-row .pts { font-family:'Bebas Neue',sans-serif; color:var(--red); letter-spacing:1px; font-size:16px; }
+    .rank-row.top { background:rgba(204,0,0,0.06); border-bottom-color:var(--bordo); }
   </style>
 </head>
 <body>
@@ -23,20 +49,21 @@
   </div></div>
   <div class="page-title"><h1>MINI<span>JUEGO</span></h1><p>Sobreviví, juntá monedas, canjealas en la ruleta</p></div>
 
-  <main class="catalog narrow" style="text-align:center">
-    <div class="info-box" style="text-align:left">
-      <h3>Cómo funciona</h3>
-      <ul>
-        <li>Esquivá obstáculos y juntá monedas en las calles de Montevideo.</li>
-        <li>Cada moneda recogida suma <b>1 punto</b> a tu saldo.</li>
-        <li>Canjeá tus puntos por premios en la ruleta.</li>
-        <li>Necesitás iniciar sesión con Google para jugar y guardar tus puntos.</li>
-      </ul>
+  <main class="catalog narrow">
+    <div class="mj-hero">
+      <div class="mj-glow"></div>
+      <div class="mj-logo">CHUNKY<span>RUNNER</span></div>
+      <div class="mj-sub">corré por las calles de mvd · esquivá · juntá monedas</div>
+      <div id="cta" class="mj-cta"><div class="cargando">cargando...</div></div>
     </div>
 
-    <div id="cta" style="margin:24px 0"><div class="cargando">cargando...</div></div>
+    <div class="mj-feats">
+      <div class="mj-feat"><div class="ic">🏃</div><div>Endless runner<br>3 carriles</div></div>
+      <div class="mj-feat"><div class="ic">🪙</div><div>Cada moneda<br>= 1 punto</div></div>
+      <div class="mj-feat"><div class="ic">🎁</div><div>Canjealos<br>en la ruleta</div></div>
+    </div>
 
-    <section class="catalog narrow" style="padding:0">
+    <section>
       <div class="section-header"><span class="section-label">TOP <span>SEMANAL</span></span></div>
       <div id="ranking"><div class="cargando">cargando ranking...</div></div>
     </section>
@@ -51,28 +78,33 @@ async function authReady() {
   return window.CHKAuth;
 }
 function esc(s = '') { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+const MEDALS = ['🥇', '🥈', '🥉'];
 
 (async () => {
   const A = await authReady();
   const u = A ? await A.me() : null;
   const cta = document.getElementById('cta');
   if (u) {
-    cta.innerHTML = `<a class="btn big" href="/minijuego/jugar" style="max-width:300px;margin:0 auto"><span>Jugar ahora</span></a>`;
+    cta.innerHTML = `<a class="btn big" href="/minijuego/jugar" style="max-width:320px;width:100%"><span>▶ Jugar ahora</span></a>`;
   } else {
-    cta.innerHTML = `
-      <p style="color:#bdb5a6;font-size:14px;margin-bottom:14px">Iniciá sesión para jugar y acumular puntos.</p>
-      <a class="btn big" href="/mi-perfil" style="max-width:320px;margin:0 auto"><span>Iniciá sesión para jugar</span></a>`;
+    cta.innerHTML = `<a class="btn big" href="/mi-perfil" style="max-width:340px;width:100%"><span>Iniciá sesión para jugar</span></a>`;
   }
 
-  // Ranking semanal (público).
   try {
     const { top } = await fetch('/api/app/ranking').then(r => r.json());
     const el = document.getElementById('ranking');
     el.innerHTML = (top && top.length)
-      ? top.map(r => `<div class="rank-row"><span class="pos">#${r.pos} ${esc(r.alias)}</span><span class="pts">${Number(r.puntaje).toLocaleString('es-UY')} pts</span></div>`).join('')
-      : '<p style="color:var(--muted);font-size:14px">Todavía no hay puntajes esta semana. ¡Sé el primero!</p>';
+      ? top.map(r => `
+        <div class="rank-row ${r.pos <= 3 ? 'top' : ''}">
+          <div class="who">
+            <span class="${r.pos <= 3 ? 'medal' : 'pos'}">${r.pos <= 3 ? MEDALS[r.pos - 1] : '#' + r.pos}</span>
+            <span class="alias">${esc(r.alias)}</span>
+          </div>
+          <span class="pts">${Number(r.puntaje).toLocaleString('es-UY')}</span>
+        </div>`).join('')
+      : '<p style="color:var(--muted);font-size:14px;text-align:center;padding:10px">Todavía no hay puntajes esta semana. ¡Sé el primero! 🪙</p>';
   } catch {
-    document.getElementById('ranking').innerHTML = '<p style="color:var(--muted);font-size:14px">No se pudo cargar el ranking.</p>';
+    document.getElementById('ranking').innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">No se pudo cargar el ranking.</p>';
   }
 })();
 </script>
