@@ -53,9 +53,10 @@
 <script>
 const COSTO = 1700;
 // Mismo orden que el backend (WHEEL en api/app/[action].js).
-const WHEEL = ['nada','otro_giro','nada','envio_gratis','nada','otro_giro','nada','zapas_gratis','nada','envio_gratis'];
-const LABELS = { nada:'CHUNKY BAG', otro_giro:'OTRO GIRO', envio_gratis:'ENVÍO GRATIS', zapas_gratis:'ZAPAS GRATIS' };
-const COLORS = { nada:'#1a1010', otro_giro:'#5a0e0e', envio_gratis:'#8b0000', zapas_gratis:'#cc0000' };
+const WHEEL = ['nada','otro_giro','llavero_chunky','nada','otro_giro','envio_gratis','nada','llavero_chunky','otro_giro','chunky_bag'];
+const LABELS = { nada:'CASI', otro_giro:'OTRO GIRO', llavero_chunky:'LLAVERO', envio_gratis:'ENVÍO GRATIS', chunky_bag:'CHUNKY BAG' };
+const COLORS = { nada:'#1a1010', otro_giro:'#5a0e0e', llavero_chunky:'#7a1414', envio_gratis:'#8b0000', chunky_bag:'#cc0000' };
+const PREMIOS = ['envio_gratis', 'chunky_bag', 'llavero_chunky'];
 
 async function authReady() {
   for (let i = 0; i < 120 && !window.CHKAuth; i++) await new Promise(r => setTimeout(r, 50));
@@ -95,14 +96,15 @@ function animarHacia(seccion) {
   document.getElementById('rueda').style.transform = `rotate(${rot}deg)`;
 }
 
-function setSaldo(pts, giros) {
+function setSaldo(pts, giros, restantes) {
   document.getElementById('saldo').textContent = Number(pts).toLocaleString('es-UY');
   const cl = document.getElementById('costo-line');
-  cl.textContent = giros > 0 ? `Tenés ${giros} giro(s) gratis` : `Cada giro cuesta ${COSTO} puntos`;
+  if (giros > 0) cl.textContent = `Tenés ${giros} giro(s) gratis`;
+  else cl.textContent = `Cada giro: ${COSTO} monedas` + (restantes != null ? ` · te quedan ${restantes} esta semana` : '');
   const btn = document.getElementById('girar');
   const puede = giros > 0 || pts >= COSTO;
   btn.disabled = !puede;
-  btn.querySelector('span').textContent = giros > 0 ? 'Girar (gratis)' : `Girar (${COSTO} pts)`;
+  btn.querySelector('span').textContent = giros > 0 ? 'Girar (gratis)' : `Girar (${COSTO})`;
 }
 
 (async () => {
@@ -129,11 +131,11 @@ function setSaldo(pts, giros) {
       const d = data.j;
       animarHacia(d.seccion);
       setTimeout(() => {
-        const gano = d.resultado === 'envio_gratis' || d.resultado === 'zapas_gratis';
+        const gano = PREMIOS.includes(d.resultado);
         res.className = 'resultado ' + (gano ? 'win' : d.resultado === 'otro_giro' ? 'spin' : 'none');
-        res.textContent = d.etiqueta;
+        res.textContent = d.etiqueta + (gano ? ' — reclamalo en tu perfil' : '');
         u.puntos_disponibles = d.puntos_disponibles; u.giros_gratis = d.giros_gratis;
-        setSaldo(d.puntos_disponibles, d.giros_gratis);
+        setSaldo(d.puntos_disponibles, d.giros_gratis, d.giros_restantes);
         if (window.CHKAuth) window.CHKAuth.me(true).then(() => window.CHKAuth.mountHeader());
         girando = false;
       }, 4200);

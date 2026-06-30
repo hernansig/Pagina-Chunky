@@ -1,6 +1,6 @@
 /* ════════════════════════════════════════════════════════════════
    CHUNKY RUNNER — núcleo del juego (estado, spawns, update, render)
-   Puntaje = monedas. Los metros se guardan aparte (ranking mensual).
+   Ranking = METROS. Monedas = saldo de cuenta (vidas/ruleta).
    ════════════════════════════════════════════════════════════════ */
 (function (CR) {
   'use strict';
@@ -8,9 +8,23 @@
   const R = CR.R, pf = CR.pf, shadow = CR.shadow, billboard = CR.billboard;
   const S = CR.Sprites, BG = CR.Background, Audio = CR.Audio, Board = CR.Board;
   const W = K.W, H = K.H, HORIZON = K.HORIZON;
-  const BONE = '#e8e0d0', RED = '#cc0000', REDM = '#ff3a3a', MUTED = '#5a5a5a';
+  const BONE = '#e8e0d0', RED = '#cc0000', REDM = '#ff3a3a', MUTED = '#5a5a5a', GREEN = '#9bff7a', GOLD = '#ffd35a';
+  const DEBUG = !!CR.DEBUG;
 
-  let state = 'start';     // 'start' | 'playing' | 'over'
+  // Banco de trivia anti-bot (la posición correcta se mezcla en cada pregunta).
+  const TRIVIA = [
+    { q: '¿De qué ciudad es Chunky Snkrs?', o: ['Montevideo', 'Buenos Aires', 'Madrid'], c: 0 },
+    { q: '¿Qué vende Chunky?', o: ['Zapatillas y streetwear', 'Comida', 'Autos'], c: 0 },
+    { q: 'El runner corre por las calles de…', o: ['MVD', 'NYC', 'Tokio'], c: 0 },
+    { q: '¿Qué juntás en el juego?', o: ['Monedas', 'Estrellas', 'Llaves'], c: 0 },
+    { q: '¿Cómo esquivás la basura?', o: ['Saltando o cambiando de carril', 'Disparando', 'Volando'], c: 0 },
+    { q: 'El estilo de Chunky es…', o: ['Urbano / Y2K', 'Formal', 'Clásico'], c: 0 },
+    { q: '¿Qué grita el motochorro?', o: ['Dame las zapas', 'Hola', 'Corré'], c: 0 },
+    { q: '¿Para qué sirven las monedas?', o: ['Comprar vidas y girar la ruleta', 'Nada', 'Cambiar de color'], c: 0 },
+  ];
+  const TRIVIA_CADA = 280;  // metros entre preguntas (aprox)
+
+  let state = 'start';     // 'start' | 'playing' | 'trivia' | 'revivir' | 'over'
   let game = null;
   let vignette = null;
 
@@ -19,12 +33,12 @@
   // ── Estado de partida ─────────────────────────────────────────
   function newGame() {
     return {
-      t: 0, dist: 0, coins: 0, speed: K.BASE_Z, scroll: 0, cam: 0,
-      player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, hopT: 0, shield: false, invuln: 0, run: 0 },
+      t: 0, dist: 0, metros: 0, coins: 0, speed: K.BASE_Z, scroll: 0, cam: 0,
+      player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, hopT: 0, shield: false, invuln: 0, run: 0, vidas: 2 },
       obstacles: [], coinsArr: [], powerups: [], particles: [], pops: [],
-      spawnT: 1.0, coinT: 0.8, powerT: 7,
+      spawnT: 1.0, coinT: 0.8, powerT: 7, triviaAt: TRIVIA_CADA,
       fx: { mult: 1, sTimer: 0, sLabel: null, sGood: true, rainTimer: 0 },
-      banner: null, shake: 0, coinFlash: 0, finalCoins: 0, finalMetros: 0, saved: false,
+      banner: null, shake: 0, coinFlash: 0, finalCoins: 0, finalMetros: 0,
     };
   }
 
@@ -56,28 +70,24 @@
     game.obstacles.push({ type: 'garbage', lane, z: K.ZFAR.garbage, anim: 0, hit: false, factor: 1.0, jumpable: true, half: 23, variant: rnd(4) });
   }
   function spawnMoto(free) {
-    const lane = free[rnd(free.length)];                  // cualquier carril (antes era casi siempre el central)
+    const lane = free[rnd(free.length)];
     game.obstacles.push({ type: 'moto', lane, z: K.ZFAR.moto, anim: 0, hit: false, factor: 1.7, jumpable: false, half: 24 });
   }
   function pushZombie(lane, z, talk) {
     const o = { type: 'zombie', lane, z, anim: Math.random() * 6, hit: false, factor: 1.18, jumpable: false, half: 12, talk: !!talk, mutant: false };
     game.obstacles.push(o); return o;
   }
-  // Grupo de 1–3 zombies que ocupa 1–2 carriles (deja siempre ≥1 libre).
-  // Pasado cierto tiempo el de adelante puede ser MUTANTE: lanza un
-  // escupitajo tóxico (ataque especial) al carril del jugador (saltable o
-  // esquivable, ~0.8s de reacción fija).
   function spawnZombieGroup(free) {
-    const canTwo = free.length >= 3;                      // ocupar 2 carriles solo si queda ≥1 libre
+    const canTwo = free.length >= 3;
     const lanesCount = (canTwo && Math.random() < 0.5) ? 2 : 1;
     const pool = free.slice(), chosen = [];
     for (let i = 0; i < lanesCount; i++) chosen.push(pool.splice(rnd(pool.length), 1)[0]);
-    let budget = lanesCount === 2 ? 2 + rnd(2) : 1 + rnd(3);   // 2–3 o 1–3 zombies
+    let budget = lanesCount === 2 ? 2 + rnd(2) : 1 + rnd(3);
     const depth = {}; chosen.forEach(l => (depth[l] = 0));
     let li = 0, front = null;
     while (budget > 0) {
       const lane = chosen[li % lanesCount];
-      const z = pushZombie(lane, K.ZFAR.zombie + depth[lane] * 0.7, front === null);  // un solo globo por grupo
+      const z = pushZombie(lane, K.ZFAR.zombie + depth[lane] * 0.7, front === null);
       if (front === null) front = z;
       depth[lane]++; budget--; li++;
     }
@@ -90,31 +100,30 @@
   }
   function spawnObstacle() {
     const free = [0, 1, 2].filter(l => !laneOccupied(l));
-    if (free.length < 2) return;                          // siempre ≥1 carril libre
+    if (free.length < 2) return;
     const r = Math.random();
     if (r < 0.34) spawnGarbage(free);
     else if (r < 0.70) spawnZombieGroup(free);
     else spawnMoto(free);
   }
 
-  // Monedas en patrones (línea / zigzag tejido / arco para saltar)
   function spawnCoins() {
     const baseZ = K.ZFAR.coin, kind = Math.random();
-    const add = (lane, z, h) => game.coinsArr.push({ lane, z, h, spin: Math.random() * 6, got: false, passed: false });
-    if (kind < 0.32) {                                     // línea baja
+    const add = (lane, z, h) => game.coinsArr.push({ lane, z, pz: z, h, spin: Math.random() * 6, got: false });
+    if (kind < 0.32) {
       const lane = rnd(3), n = 4 + rnd(3);
       for (let i = 0; i < n; i++) add(lane, baseZ + i * 0.55, 0);
-    } else if (kind < 0.56) {                              // zigzag: te hace tejer entre carriles
+    } else if (kind < 0.56) {
       let lane = rnd(3), dir = lane === 2 ? -1 : 1; const n = 6 + rnd(4);
       for (let i = 0; i < n; i++) {
         add(lane, baseZ + i * 0.6, 0);
         if (lane + dir < 0 || lane + dir > 2) dir = -dir;
         if (i % 2 === 1) lane += dir;
       }
-    } else if (kind < 0.76) {                              // arco para saltar
+    } else if (kind < 0.76) {
       const lane = rnd(3), n = 5 + rnd(2);
       for (let i = 0; i < n; i++) add(lane, baseZ + i * 0.5, Math.sin((i / (n - 1)) * Math.PI) * 74);
-    } else {                                               // fila alta: salto obligado
+    } else {
       const lane = rnd(3), n = 4 + rnd(3);
       for (let i = 0; i < n; i++) add(lane, baseZ + i * 0.5, 60 + Math.sin((i / (n - 1)) * Math.PI) * 12);
     }
@@ -122,7 +131,7 @@
   }
 
   function spawnPowerup() {
-    game.powerups.push({ lane: rnd(3), z: K.ZFAR.power, phase: Math.random() * 6, got: false, passed: false });
+    game.powerups.push({ lane: rnd(3), z: K.ZFAR.power, phase: Math.random() * 6, got: false });
     game.powerT = 10 + Math.random() * 7;
   }
   function applyPowerup() {
@@ -138,18 +147,30 @@
     return iv;
   }
 
+  // Limpia amenazas y da invulnerabilidad. Conserva metros, monedas y velocidad.
+  function respawn() {
+    const g = game, p = g.player;
+    g.obstacles = []; g.powerups = []; g.spawnT = 1.2; g.shake = 0.3;
+    p.invuln = 1.8; p.shield = false;
+    banner('¡PERDISTE UN CORAZÓN!', RED); Audio.sfx.hit();
+  }
+
   // ── Update ────────────────────────────────────────────────────
   function update(dt) {
     const g = game, p = g.player, fx = g.fx;
     g.t += dt;
-    g.speed = Math.min(K.CAP_Z, K.BASE_Z + g.t * K.SPEED_RAMP);   // sube rápido y parejo
+    g.speed = Math.min(K.CAP_Z, K.BASE_Z + g.t * K.SPEED_RAMP);
     if (fx.sTimer > 0) { fx.sTimer -= dt; if (fx.sTimer <= 0) { fx.mult = 1; fx.sLabel = null; } }
     if (fx.rainTimer > 0) fx.rainTimer -= dt;
     const eff = g.speed * Math.min(K.MULT_MAX, fx.mult);
 
     g.dist += eff * dt; g.scroll += eff * dt;
+    g.metros += eff * dt * K.METERS;                 // PUNTAJE = metros (acumula)
 
-    // jugador (la cámara se centra en su carril)
+    // Trivia anti-bot: pausa y pregunta cada ~TRIVIA_CADA metros.
+    if (g.metros >= g.triviaAt) { g.triviaAt = g.metros + TRIVIA_CADA + Math.random() * 140; mostrarTrivia(); return; }
+
+    // jugador
     p.px += (p.lane - 1 - p.px) * Math.min(1, dt * 17);
     g.cam = p.px;
     if (p.jumping) { p.jumpOff += p.jumpVel * dt; p.jumpVel -= K.GRAV * dt; if (p.jumpOff <= 0) { p.jumpOff = 0; p.jumping = false; p.jumpVel = 0; } }
@@ -164,40 +185,54 @@
     g.coinT -= dt;  if (g.coinT <= 0) spawnCoins();
     g.powerT -= dt; if (g.powerT <= 0) spawnPowerup();
 
-    // mover en z
+    // mover en z (guardando z previo para detección por barrido)
     for (const o of g.obstacles) { o.z -= (o.spit ? o.spitSpeed : eff * o.factor) * dt; o.anim += dt * (o.type === 'moto' ? 22 : o.type === 'spit' ? 14 : 6); }
-    for (const c of g.coinsArr) { c.z -= eff * dt; c.spin += dt * 9; }
-    for (const u of g.powerups) { u.z -= eff * dt; u.phase += dt * 3.4; }
+    for (const c of g.coinsArr) { c.pz = c.z; c.z -= eff * dt; c.spin += dt * 9; }
+    for (const u of g.powerups) { u.pz = u.z; u.z -= eff * dt; u.phase += dt * 3.4; }
     for (const pt of g.particles) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 760 * dt; pt.life -= dt; }
     for (const pk of g.pops) { pk.y -= 40 * dt; pk.life -= dt; }
 
-    // ── colisiones (por cruce de plano: nada "tunelea" a alta velocidad) ──
+    // ── colisiones con obstáculos (cruce de plano) ──
     for (const o of g.obstacles) {
       if (o.hit || o.z > K.HIT_Z) continue;
       o.hit = true;
       if (o.lane !== p.lane) continue;
-      if (o.jumpable && p.jumpOff > 30) continue;          // saltó la basura
+      if (o.jumpable && p.jumpOff > 30) continue;
       if (p.invuln > 0) continue;
       if (p.shield) { p.shield = false; p.invuln = 1.0; g.shake = 0.25; o.z = -1; burst(K.PLAYER_X, groundY(K.PLAYER_Z) - 70, BONE, 14); banner('¡ESCUDO ROTO!', BONE); Audio.sfx.hit(); }
-      else { endGame(); return; }
+      else {
+        o.z = -1; p.vidas -= 1;
+        if (p.vidas > 0) { respawn(); return; }
+        ofrecerRevivir(); return;
+      }
     }
-    // Recolección por POSICIÓN VISUAL del jugador. p.px es la posición continua
-    // del avatar (no el carril discreto), así agarra las monedas por las que
-    // realmente pasa por encima, incluso mientras se desliza entre carriles —
-    // esa era la causa de "paso por arriba y no la agarra". Ventana en z ancha
-    // + salto tolerante para que tampoco se escapen a alta velocidad.
-    const contLane = p.px + 1;                          // 0..2 continuo (carril visual)
+
+    // ── recolección de monedas: carril visual + ventana + BARRIDO en z ──
+    // (visual = posición continua del avatar; barrido = cruce del plano del
+    //  jugador entre frame y frame, anti-tunneling a alta velocidad).
+    const contLane = p.px + 1;
     for (const c of g.coinsArr) {
-      if (c.got || c.z > K.COLLECT_Z) continue;
-      if (Math.abs(contLane - c.lane) < 0.6 && p.jumpOff >= Math.min(c.h - 28, 42)) {
+      if (c.got) continue;
+      const laneOk = Math.abs(contLane - c.lane) < 0.6;
+      const jumpOk = p.jumpOff >= Math.min(c.h - 28, 42);
+      const inWindow = c.z <= K.COLLECT_Z && c.z > -0.5;
+      const crossed = c.pz != null && c.z <= K.PLAYER_Z && c.pz > K.PLAYER_Z;   // cruzó el plano del jugador
+      if (laneOk && jumpOk && (inWindow || crossed)) {
         c.got = true; g.coins++; g.coinFlash = 1;
         const cx = sx(c.lane - 1, c.z, g.cam), cy = groundY(c.z) - (28 + c.h) * pp(c.z);
-        burst(cx, cy, RED, 6); pop(cx, cy - 6, '+1', BONE); Audio.sfx.coin();
+        burst(cx, cy, GOLD, 6); pop(cx, cy - 6, '+1', GOLD); Audio.sfx.coin();
+        if (DEBUG) console.log('coin OK', { lane: c.lane, z: +c.z.toFixed(2), crossed });
+      } else if (DEBUG && c.z <= K.COLLECT_Z && c.z > -0.5 && !c._dbg) {
+        c._dbg = true;
+        console.log('coin SKIP', { lane: c.lane, z: +c.z.toFixed(2), contLane: +contLane.toFixed(2), laneOk, jumpOk, jumpOff: +p.jumpOff.toFixed(0), h: c.h });
       }
     }
     for (const u of g.powerups) {
-      if (u.got || u.z > K.COLLECT_Z) continue;
-      if (Math.abs(contLane - u.lane) < 0.6) { u.got = true; burst(sx(u.lane - 1, u.z, g.cam), groundY(u.z) - 46 * pp(u.z), BONE, 12); applyPowerup(); }
+      if (u.got) continue;
+      const laneOk = Math.abs(contLane - u.lane) < 0.6;
+      const inWindow = u.z <= K.COLLECT_Z && u.z > -0.5;
+      const crossed = u.pz != null && u.z <= K.PLAYER_Z && u.pz > K.PLAYER_Z;
+      if (laneOk && (inWindow || crossed)) { u.got = true; burst(sx(u.lane - 1, u.z, g.cam), groundY(u.z) - 46 * pp(u.z), BONE, 12); applyPowerup(); }
     }
 
     // limpieza
@@ -227,7 +262,6 @@
     ctx.globalAlpha = 1;
   }
 
-  // Halo verde detrás de la basura (blending aditivo → "prende" sobre el negro)
   function drawSmokeGlow(ctx, cx, gy, s, phase) {
     const pulse = 1 + Math.sin(phase * 3) * 0.08;
     ctx.globalCompositeOperation = 'lighter';
@@ -237,7 +271,6 @@
     ctx.beginPath(); ctx.ellipse(cx, gy - 16 * s, 21 * s, 18 * s, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   }
-  // Bocanadas de humo verde neón que suben (aditivo, bien visibles)
   function drawSmoke(ctx, cx, baseY, s, phase) {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 5; i++) {
@@ -258,14 +291,20 @@
     ctx.globalAlpha = 1;
   }
   function drawSpit(ctx, o, cam) {
-    for (let i = 3; i >= 1; i--) {                        // estela
+    for (let i = 3; i >= 1; i--) {
       const zz = o.z + i * 0.5, sp = pp(zz);
       ctx.globalAlpha = 0.1 * i; ctx.fillStyle = '#39ff6a';
       ctx.beginPath(); ctx.arc(sx(o.lane - 1, zz, cam), groundY(zz) - 16 * sp, 11 * sp, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
-    const sp = pp(o.z), cx = sx(o.lane - 1, o.z, cam), cy = groundY(o.z) - 16 * sp;   // bajo, a ras del piso (saltable)
+    const sp = pp(o.z), cx = sx(o.lane - 1, o.z, cam), cy = groundY(o.z) - 16 * sp;
     billboard(cx, cy, sp * K.OBJ_SCALE * 1.15, () => S.spitB(o.anim));
+  }
+  function drawHeart(ctx, cx, cy, r, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(cx - r * 0.5, cy - r * 0.2, r * 0.55, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.5, cy - r * 0.2, r * 0.55, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx - r, cy - r * 0.05); ctx.lineTo(cx + r, cy - r * 0.05); ctx.lineTo(cx, cy + r * 1.15); ctx.closePath(); ctx.fill();
   }
 
   function render() {
@@ -280,7 +319,6 @@
     BG.drawFloor(ctx, g.cam, g.scroll);
     if (playing) drawSpeedLines(ctx, sf);
 
-    // ordenar por z (lejos → cerca)
     const items = [];
     for (const o of g.obstacles) items.push({ z: o.z, k: 'o', o });
     for (const c of g.coinsArr) items.push({ z: c.z, k: 'c', c });
@@ -292,13 +330,13 @@
       if (it.k === 'h') { drawHero(); continue; }
       if (it.k === 'o') {
         const o = it.o, s = pp(o.z) * K.OBJ_SCALE, cx = sx(o.lane - 1, o.z, g.cam), gy = groundY(o.z);
-        const bs = clamp(s, 1.0, 1.7);                    // escala del globo (fija/legible)
+        const bs = clamp(s, 1.0, 1.7);
         if (o.type === 'garbage') {
-          const sg = s * 1.4;                             // más grande para contrastar con el piso
+          const sg = s * 1.4;
           shadow(cx, gy, o.half * sg, 0.34);
-          drawSmokeGlow(ctx, cx, gy, sg, o.anim);         // halo verde DETRÁS
+          drawSmokeGlow(ctx, cx, gy, sg, o.anim);
           billboard(cx, gy, sg, () => S.garbageB(o.variant));
-          drawSmoke(ctx, cx, gy - 4 * sg, sg, o.anim);    // bocanadas verdes ARRIBA
+          drawSmoke(ctx, cx, gy - 4 * sg, sg, o.anim);
         } else if (o.type === 'spit') {
           drawSpit(ctx, o, g.cam);
         } else if (o.type === 'zombie') {
@@ -333,7 +371,7 @@
     }
     ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
 
-    if (playing) drawHUD();
+    if (state !== 'start') drawHUD();
   }
 
   function drawHero() {
@@ -351,22 +389,72 @@
   }
 
   function drawHUD() {
-    const g = game, metros = Math.floor(g.dist * K.METERS);
-    const sz = 26 + g.coinFlash * 10;
-    pf('' + g.coins, W - 16, 14, sz, BONE, 'right');     // PUNTAJE = monedas
-    pf('MONEDAS', W - 16, 48, 9, RED, 'right');
-    pf(metros + ' m', W - 16, 62, 8, MUTED, 'right');    // distancia (ranking mensual)
-    let y = 14;
-    if (g.player.shield) { pf('◈ ESCUDO', 16, y, 11, BONE); y += 22; }
+    const ctx = CR.ctx, g = game, p = g.player;
+    const metros = Math.floor(g.metros);
+    pf('' + metros + ' m', W - 16, 14, 24, BONE, 'right');     // PUNTAJE = metros
+    pf('METROS', W - 16, 44, 9, RED, 'right');
+    pf('' + g.coins, W - 16, 60, 14, GOLD, 'right');           // monedas (vidas/ruleta)
+    pf('monedas', W - 16, 78, 8, MUTED, 'right');
+    // corazones (vidas)
+    for (let i = 0; i < p.vidas; i++) drawHeart(ctx, 24 + i * 26, 24, 10, RED);
+    let y = 44;
+    if (p.shield) { pf('◈ ESCUDO', 16, y, 11, BONE); y += 22; }
     if (g.fx.sTimer > 0) { pf((g.fx.sGood ? '▲ ' : '▼ ') + g.fx.sLabel, 16, y, 11, g.fx.sGood ? BONE : REDM); y += 22; }
-    if (g.fx.rainTimer > 0) { pf('☂ LLUVIA', 16, y, 11, REDM); }
-    if (g.banner && g.banner.t > 0) { CR.ctx.globalAlpha = Math.min(1, g.banner.t); pf(g.banner.text, W / 2, 66, 14, g.banner.color, 'center'); CR.ctx.globalAlpha = 1; }
+    if (g.fx.rainTimer > 0) { pf('LLUVIA', 16, y, 11, REDM); }
+    if (g.banner && g.banner.t > 0) { ctx.globalAlpha = Math.min(1, g.banner.t); pf(g.banner.text, W / 2, 70, 14, g.banner.color, 'center'); ctx.globalAlpha = 1; }
+  }
+
+  // ── Trivia (DOM overlay) ──────────────────────────────────────
+  function mostrarTrivia() {
+    const el = document.getElementById('trivia');
+    if (!el) return;   // sin overlay → seguir sin trivia
+    state = 'trivia';
+    const q = TRIVIA[(Math.random() * TRIVIA.length) | 0];
+    const order = q.o.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = order[i]; order[i] = order[j]; order[j] = t; }
+    const correctaPos = order.indexOf(q.c);
+    el.querySelector('.trivia-q').textContent = q.q;
+    const opts = el.querySelector('.trivia-opts'); opts.innerHTML = '';
+    order.forEach((origIdx, pos) => {
+      const b = document.createElement('button');
+      b.className = 'trivia-opt'; b.textContent = q.o[origIdx];
+      b.addEventListener('click', () => responderTrivia(pos === correctaPos), { once: true });
+      opts.appendChild(b);
+    });
+    el.classList.remove('hidden');
+  }
+  function responderTrivia(ok) {
+    const el = document.getElementById('trivia'); if (el) el.classList.add('hidden');
+    if (ok) { game.metros *= 1.5; banner('¡CORRECTO! x1.5 METROS', GREEN); Audio.sfx.good(); }
+    else { banner('Respuesta incorrecta', MUTED); Audio.sfx.bad(); }
+    state = 'playing';
+  }
+
+  // ── Sin corazones → ofrecer comprar vida (lo resuelve la página) ──
+  function ofrecerRevivir() {
+    const el = document.getElementById('revivir');
+    if (!el) { endGame(); return; }
+    state = 'revivir';
+    game.shake = 0.3; Audio.sfx.hit();
+    el.classList.remove('hidden');
+  }
+  function revivir() {                      // lo llama la página tras pagar la vida
+    const el = document.getElementById('revivir'); if (el) el.classList.add('hidden');
+    const p = game.player;
+    p.vidas = 1; p.invuln = 1.8; p.shield = false;
+    game.obstacles = []; game.powerups = []; game.spawnT = 1.2; game.shake = 0.2;
+    state = 'playing'; banner('¡SEGUÍS!', BONE);
+  }
+  function terminar() {
+    const el = document.getElementById('revivir'); if (el) el.classList.add('hidden');
+    endGame();
   }
 
   // ── Bucle por frame ───────────────────────────────────────────
   function tick(dt) {
     if (state === 'playing') update(dt);
-    else { game.scroll += 2.4 * dt; game.cam = Math.sin(performance.now() / 2600) * 0.15; }
+    else if (state === 'start' || state === 'over') { game.scroll += 2.4 * dt; game.cam = Math.sin(performance.now() / 2600) * 0.15; }
+    // 'trivia' / 'revivir' → congelado
   }
 
   // ── Flujo de pantallas ────────────────────────────────────────
@@ -375,24 +463,29 @@
     game = newGame(); state = 'playing';
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('overScreen').classList.add('hidden');
+    const rv = document.getElementById('revivir'); if (rv) rv.classList.add('hidden');
+    const tv = document.getElementById('trivia'); if (tv) tv.classList.add('hidden');
   }
-  // Integrado: al morir se guarda automáticamente con la cuenta Google.
+  // Game over FINAL: guarda la partida (metros) + banca las monedas. Una sola vez.
   function endGame() {
-    state = 'over'; game.shake = 0.3; Audio.sfx.hit();
-    game.finalMetros = Math.floor(game.dist * K.METERS);
-    game.finalCoins = game.coins; game.saved = true;
-    document.getElementById('goTotal').textContent = game.finalCoins;
-    document.getElementById('goDist').textContent = game.finalMetros;
-    const st = document.getElementById('saveStatus');
-    if (st) st.textContent = 'Guardando...';
+    state = 'over'; game.shake = 0.3; Audio.sfx.bad();
+    const metros = Math.floor(game.metros), coins = game.coins;
+    game.finalMetros = metros; game.finalCoins = coins;
+    const goD = document.getElementById('goDist'); if (goD) goD.textContent = metros;
+    const goC = document.getElementById('goCoins'); if (goC) goC.textContent = coins;
+    const stt = document.getElementById('saveStatus');
+    if (stt) stt.textContent = 'Guardando...';
     if (Board.save) {
-      Board.save(game.finalCoins, game.finalMetros).then((r) => {
-        if (st) st.textContent = r ? `✓ +${game.finalCoins} monedas a tu cuenta` : 'No se pudo guardar (revisá tu sesión)';
-      });
+      Board.save(metros, coins).then((r) => { if (stt) stt.textContent = r ? '✓ partida guardada' : 'No se pudo guardar (revisá tu sesión)'; });
     }
-    Board.render();
+    if (Board.render) Board.render();
     document.getElementById('overScreen').classList.remove('hidden');
   }
 
-  CR.Game = { newGame, tick, render, start, moveLane, jump, getState: () => state, init() { game = newGame(); } };
+  CR.Game = {
+    newGame, tick, render, start, moveLane, jump, revivir, terminar,
+    getState: () => state, getRun: () => ({ metros: Math.floor(game.metros), coins: game.coins, vidas: game.player.vidas }),
+    gastarMonedas: (n) => { if (game && game.coins >= n) { game.coins -= n; return true; } return false; },
+    init() { game = newGame(); },
+  };
 })(window.CR);

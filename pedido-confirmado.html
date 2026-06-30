@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pago recibido — CHUNKY SNKRS</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Bebas+Neue&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/base.css">
+</head>
+<body>
+<div class="wrapper">
+  <div class="ticker-wrap" aria-hidden="true"><div class="ticker-track">
+    <span class="ticker-item">GRACIAS POR TU COMPRA</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">GRACIAS POR TU COMPRA</span><span class="ticker-item">CHUNKY SNKRS</span>
+    <span class="ticker-item">GRACIAS POR TU COMPRA</span><span class="ticker-item">CHUNKY SNKRS</span>
+  </div></div>
+
+  <div class="page-title"><h1>PAGO <span>RECIBIDO</span></h1><p>Estamos confirmando tu pedido</p></div>
+
+  <main class="catalog narrow" style="text-align:center">
+    <div class="info-box" style="text-align:left">
+      <h3>¡Gracias!</h3>
+      <ul>
+        <li>Recibimos tu pago. La confirmación final llega por mail apenas MercadoPago lo acredita (puede tardar unos minutos).</li>
+        <li id="cod-li" style="display:none">Tu código de pedido: <b id="codigo"></b></li>
+        <li>Podés seguir el estado de tu pedido con ese código cuando quieras.</li>
+      </ul>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:22px">
+      <a class="btn" id="rastrear" href="/pedido" style="max-width:240px"><span>Rastrear mi pedido</span></a>
+      <a class="btn ghost" href="/" style="max-width:240px"><span>Volver al catálogo</span></a>
+    </div>
+  </main>
+</div>
+
+<script src="/assets/chrome.js"></script>
+<script>
+  const codigo = new URLSearchParams(location.search).get('codigo');
+  if (codigo) {
+    document.getElementById('codigo').textContent = codigo;
+    document.getElementById('cod-li').style.display = '';
+    document.getElementById('rastrear').href = '/pedido/' + encodeURIComponent(codigo);
+  }
+</script>
+</body>
+</html>

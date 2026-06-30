@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <style>
-    #salir { position:absolute; top:10px; left:12px; z-index:5; font-family:'Press Start 2P',monospace; font-size:10px; color:#9a86c0; text-decoration:none; background:rgba(0,0,0,0.4); border:1px solid #2a1414; padding:6px 9px; }
+    #salir { position:absolute; top:10px; left:12px; z-index:5; font-family:'Press Start 2P',monospace; font-size:10px; color:#9a8686; text-decoration:none; background:rgba(0,0,0,0.4); border:1px solid #2a1414; padding:6px 9px; }
     #salir:hover { color:#cc0000; }
     #saveStatus { font-size:clamp(8px,1.7vw,11px); color:#9bff7a; letter-spacing:1px; min-height:14px; }
     #authGate { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:6; font-family:'Press Start 2P',monospace; color:#e8e0d0; font-size:11px; background:#050505; }
@@ -27,18 +27,16 @@
   <!-- INICIO -->
   <div id="startScreen" class="screen hidden">
     <div class="logo"><span class="l1">CHUNKY</span><span class="l2">RUNNER</span></div>
-    <div class="sub">sobrevivís en las calles de mvd</div>
+    <div class="sub">2 corazones · juntá metros · respondé la trivia x1.5</div>
     <button id="playBtn" class="btn">JUGAR</button>
-    <div class="help">← →  moverte entre carriles<br>↑ / W / espacio  saltar<br>(también A / D)</div>
+    <div class="help">← →  moverte · ↑ / W / espacio  saltar</div>
   </div>
 
   <!-- GAME OVER -->
   <div id="overScreen" class="screen hidden">
     <div class="go">GAME OVER</div>
-    <div class="score-break">
-      <span class="total" id="goTotal">0</span><span class="c">monedas</span>
-    </div>
-    <div class="sub-dist">distancia <b id="goDist">0</b> m · para el ranking mensual</div>
+    <div class="score-break"><span class="total" id="goDist">0</span><span class="c">metros</span></div>
+    <div class="sub-dist">monedas juntadas: <b id="goCoins">0</b></div>
     <div id="saveStatus"></div>
     <div class="board">
       <div class="board-title">TOP 10 — SEMANAL</div>
@@ -46,9 +44,30 @@
     </div>
     <button id="againBtn" class="btn">JUGAR DE NUEVO</button>
   </div>
+
+  <!-- TRIVIA -->
+  <div id="trivia" class="ovl hidden">
+    <div class="ovl-card">
+      <div class="ovl-tag">TRIVIA CHUNKY</div>
+      <div class="trivia-q"></div>
+      <div class="trivia-opts"></div>
+      <div class="ovl-hint">respuesta correcta = x1.5 metros</div>
+    </div>
+  </div>
+
+  <!-- COMPRAR VIDA -->
+  <div id="revivir" class="ovl hidden">
+    <div class="ovl-card">
+      <div class="go" style="font-size:20px">SIN CORAZONES</div>
+      <div class="ovl-sub">¿Seguís? Comprá un corazón con las monedas de tu cuenta.</div>
+      <button id="btnRevivir" class="btn">Comprar 1 corazón — 200 monedas</button>
+      <div id="revMsg" class="ovl-hint"></div>
+      <button id="btnTerminar" class="btn ghost" style="margin-top:8px">Terminar partida</button>
+    </div>
+  </div>
 </div>
 
-<!-- módulos del juego (orden importa: config primero) -->
+<!-- módulos del juego -->
 <script src="js/config.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/background.js"></script>
@@ -56,16 +75,37 @@
 <script src="js/leaderboard.js"></script>
 <script src="js/game.js"></script>
 <script src="js/input.js"></script>
-<!-- auth del sitio (sesión Google) -->
+<!-- auth del sitio -->
 <script src="/assets/auth.js"></script>
 <script>
-// Guard: solo se puede jugar con sesión. Si no hay, redirige a /mi-perfil.
 (async function () {
   for (let i = 0; i < 120 && !window.CHKAuth; i++) await new Promise(r => setTimeout(r, 50));
   if (window.CHKAuth) await window.CHKAuth.ready;
-  if (!window.CHKAuth || !(await window.CHKAuth.requireAuth())) return;   // redirige si no hay sesión
+  if (!window.CHKAuth || !(await window.CHKAuth.requireAuth())) return;  // redirige si no hay sesión
   document.getElementById('authGate').style.display = 'none';
   document.getElementById('startScreen').classList.remove('hidden');
+
+  // Comprar vida (descuenta del saldo guardado, server-side).
+  const revMsg = document.getElementById('revMsg');
+  document.getElementById('btnTerminar').addEventListener('click', () => CR.Game.terminar());
+  document.getElementById('btnRevivir').addEventListener('click', async () => {
+    const btn = document.getElementById('btnRevivir');
+    btn.disabled = true; revMsg.textContent = 'Procesando...';
+    try {
+      const t = await window.CHKAuth.getToken();
+      const r = await fetch('/api/app/comprar-vida', { method: 'POST', headers: { Authorization: 'Bearer ' + t } })
+        .then((res) => res.json().then((j) => ({ ok: res.ok, j })));
+      if (r.ok) {
+        revMsg.textContent = '';
+        window.CHKAuth.me(true).then(() => window.CHKAuth.mountHeader && window.CHKAuth.mountHeader());
+        CR.Game.revivir();
+      } else {
+        revMsg.textContent = r.j.error || 'No se pudo comprar.';
+      }
+    } catch { revMsg.textContent = 'Error de red.'; }
+    btn.disabled = false;
+  });
+
   // sesión OK → bootear el juego
   const s = document.createElement('script'); s.src = 'js/main.js'; document.body.appendChild(s);
 })();

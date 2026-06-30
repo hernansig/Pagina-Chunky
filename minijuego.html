@@ -90,18 +90,20 @@ function esc(s = '') { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;',
   }
 
   try {
-    const { top } = await fetch('/api/app/ranking').then(r => r.json());
-    const el = document.getElementById('ranking');
-    el.innerHTML = (top && top.length)
+    const t = window.CHKAuth ? await window.CHKAuth.getToken() : null;
+    const { top, tu } = await fetch('/api/app/ranking', { headers: t ? { Authorization: 'Bearer ' + t } : {} }).then(r => r.json());
+    let html = (top && top.length)
       ? top.map(r => `
         <div class="rank-row ${r.pos <= 3 ? 'top' : ''}">
           <div class="who">
             <span class="pos ${r.pos <= 3 ? 'p' + r.pos : ''}">${r.pos}º</span>
             <span class="alias">${esc(r.alias)}</span>
           </div>
-          <span class="pts">${Number(r.puntaje).toLocaleString('es-UY')}</span>
+          <span class="pts">${Number(r.metros).toLocaleString('es-UY')} m</span>
         </div>`).join('')
-      : '<p style="color:var(--muted);font-size:14px;text-align:center;padding:10px">Todavía no hay puntajes esta semana. ¡Sé el primero!</p>';
+      : '<p style="color:var(--muted);font-size:14px;text-align:center;padding:10px">Todavía no hay partidas esta semana. ¡Sé el primero!</p>';
+    if (tu) html += `<div class="rank-row" style="border-top:1px solid var(--bordo);margin-top:6px"><div class="who"><span class="pos">${tu.pos}º</span><span class="alias" style="color:#ffd35a">vos</span></div><span class="pts">${Number(tu.metros).toLocaleString('es-UY')} m</span></div>`;
+    document.getElementById('ranking').innerHTML = html;
   } catch {
     document.getElementById('ranking').innerHTML = '<p style="color:var(--muted);font-size:14px;text-align:center">No se pudo cargar el ranking.</p>';
   }

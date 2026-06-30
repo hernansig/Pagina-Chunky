@@ -1,22 +1,25 @@
+import crypto from 'node:crypto';
 import { supa } from '../../lib/supabase.js';
 import { json, fail, readBody } from '../../lib/http.js';
-import { usuarioDeReq } from '../../lib/usuario.js';
+import { usuarioDeReq, getAuthUser } from '../../lib/usuario.js';
 import { avisarDueno, plantilla } from '../../lib/mail.js';
 
-// Función única para /api/app/* (config, me, perfil, ranking, guardar-puntaje,
-// ruleta-girar). Vercel la cuenta como 1 sola función.
+// Función única para /api/app/* (Vercel la cuenta como 1 sola función).
 export default async function handler(req, res) {
   const url = new URL(req.url, 'http://x');
   const action = (req.query && req.query.action) || url.pathname.split('/').pop();
   try {
     switch (action) {
-      case 'config':         return config(req, res);
-      case 'me':             return await me(req, res);
-      case 'perfil':         return await perfil(req, res);
-      case 'ranking':        return await ranking(req, res);
-      case 'guardar-puntaje':return await guardarPuntaje(req, res);
-      case 'ruleta-girar':   return await ruletaGirar(req, res);
-      default:               return fail(res, 404, 'Acción desconocida.');
+      case 'config':          return config(req, res);
+      case 'me':              return await me(req, res);
+      case 'perfil':          return await perfil(req, res);
+      case 'ranking':         return await ranking(req, res);
+      case 'guardar-puntaje': return await guardarPuntaje(req, res);
+      case 'ruleta-girar':    return await ruletaGirar(req, res);
+      case 'comprar-vida':    return await comprarVida(req, res);
+      case 'mis-items':       return await misItems(req, res);
+      case 'reclamar-item':   return await reclamarItem(req, res);
+      default:                return fail(res, 404, 'Acción desconocida.');
     }
   } catch (err) {
     console.error('[app]', action, err.message);
@@ -24,13 +27,14 @@ export default async function handler(req, res) {
   }
 }
 
-// ── Config pública para el frontend (URL + anon key) ────────────
+const RULETA_COSTO = Number(process.env.RULETA_COSTO) || 1700;
+const VIDA_COSTO = 200;
+const LIMITE_GIROS = 20;     // giros pagos por semana
+const MAX_ITEMS = 5;         // items disponibles simultáneos
+
+// ── Config pública para el frontend ─────────────────────────────
 function config(req, res) {
-  json(res, 200, {
-    ok: true,
-    supabaseUrl: process.env.SUPABASE_URL || '',
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
-  });
+  json(res, 200, { ok: true, supabaseUrl: process.env.SUPABASE_URL || '', supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '' });
 }
 
 // ── Usuario actual (saldo para el header) ───────────────────────
@@ -40,82 +44,135 @@ async function me(req, res) {
   json(res, 200, { ok: true, usuario: publico(u) });
 }
 
-// ── Perfil completo: usuario + ranking semanal + pedidos ────────
+// ── Perfil completo: usuario + ranking (metros) + items + pedidos ──
 async function perfil(req, res) {
   const u = await usuarioDeReq(req);
   if (!u) return fail(res, 401, 'No autenticado.');
   const sb = supa();
+  const desde = semanaDesde();
 
-  // Posición en el ranking semanal (mejor puntaje por usuario en la semana).
-  const { desde } = semanaActual();
-  const { data: sem } = await sb
-    .from('puntajes_mensuales')
-    .select('usuario_id,puntaje')
-    .gte('creado_en', desde.toISOString())
-    .order('puntaje', { ascending: false })
-    .limit(2000);
-  const mejores = mejorPorUsuario(sem || []);
-  const ranking = mejores.findIndex((r) => r.usuario_id === u.id);
-  const posicion = ranking >= 0 ? ranking + 1 : null;
-  const miMejor = mejores.find((r) => r.usuario_id === u.id)?.puntaje ?? 0;
+  const { posicion, mejor } = await posicionUsuario(sb, u.id, desde);
 
-  // Pedidos asociados por usuario_id o por email.
-  const { data: pedidos } = await sb
-    .from('pedidos')
+  const { data: items } = await sb.from('items_usuario')
+    .select('id,tipo_item,estado,obtenido_en,canjeado_en')
+    .eq('usuario_id', u.id).order('obtenido_en', { ascending: false }).limit(50);
+
+  const { data: pedidos } = await sb.from('pedidos')
     .select('codigo_publico,estado_pago,estado_envio,monto_total,productos')
     .or(`usuario_id.eq.${u.id},cliente_contacto.eq.${u.email}`)
-    .order('id', { ascending: false })
-    .limit(20);
+    .order('id', { ascending: false }).limit(20);
 
   json(res, 200, {
-    ok: true,
-    usuario: publico(u),
-    ranking: { posicion, mejor: miMejor, jugadores: mejores.length },
-    pedidos: pedidos || [],
+    ok: true, usuario: publico(u),
+    ranking: { posicion, mejor }, items: items || [], pedidos: pedidos || [],
   });
 }
 
-// ── Ranking semanal top 10 (público, para minijuego/game over) ──
+// ── Ranking semanal de METROS por partida ───────────────────────
+// Top 10 global (puede repetir jugador). Si el usuario logueado no está en
+// el top, se devuelve solo su mejor partida + su posición global.
 async function ranking(req, res) {
   const sb = supa();
-  const { desde } = semanaActual();
-  const { data } = await sb
-    .from('puntajes_mensuales')
-    .select('usuario_id,alias,puntaje')
+  const desde = semanaDesde();
+  const { data } = await sb.from('puntajes_mensuales')
+    .select('usuario_id,alias,metros')
     .gte('creado_en', desde.toISOString())
-    .order('puntaje', { ascending: false })
-    .limit(2000);
-  const top = mejorPorUsuario(data || []).slice(0, 10)
-    .map((r, i) => ({ pos: i + 1, alias: r.alias || 'jugador', puntaje: r.puntaje }));
-  json(res, 200, { ok: true, top });
+    .order('metros', { ascending: false }).limit(10);
+  const top = (data || []).map((r, i) => ({ pos: i + 1, alias: r.alias || 'jugador', metros: r.metros, usuario_id: r.usuario_id }));
+
+  let tu = null;
+  const authUser = await getAuthUser(req);
+  if (authUser && !top.some((r) => r.usuario_id === authUser.id)) {
+    const { posicion, mejor } = await posicionUsuario(sb, authUser.id, desde);
+    if (posicion) tu = { pos: posicion, metros: mejor };
+  }
+  json(res, 200, { ok: true, top: top.map(({ usuario_id, ...r }) => r), tu });
 }
 
-// ── Guardar puntaje del minijuego + sumar puntos ────────────────
+// ── Guardar partida: registra metros (ranking) + banca monedas ──
 async function guardarPuntaje(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
   const u = await usuarioDeReq(req);
   if (!u) return fail(res, 401, 'No autenticado.');
 
   const body = await readBody(req);
-  // Sanity caps (el score se calcula en el cliente; evitamos valores absurdos).
-  const puntaje = clampInt(body.puntaje, 0, 5000);
-  const metros = clampInt(body.metros, 0, 200000);
+  const metros = clampInt(body.metros, 0, 1000000);
+  const monedas = clampInt(body.monedas != null ? body.monedas : body.puntaje, 0, 100000);
 
   const sb = supa();
-  await sb.from('puntajes_mensuales').insert({
-    usuario_id: u.id, alias: u.alias, puntaje, metros,
-  });
-  const { data: nuevo } = await sb.rpc('sumar_puntos', { p_usuario_id: u.id, p_delta: puntaje });
+  await sb.from('puntajes_mensuales').insert({ usuario_id: u.id, alias: u.alias, metros, puntaje: monedas });
+  await prunearPartidas(sb, u.id);   // dejar solo las 10 mejores de la semana
 
-  json(res, 200, { ok: true, ganados: puntaje, puntos_disponibles: nuevo ?? (u.puntos_disponibles + puntaje) });
+  let saldo = u.puntos_disponibles;
+  if (monedas > 0) {
+    const { data } = await sb.rpc('sumar_puntos', { p_usuario_id: u.id, p_delta: monedas });
+    saldo = data ?? (u.puntos_disponibles + monedas);
+  }
+  json(res, 200, { ok: true, metros, monedas, puntos_disponibles: saldo });
 }
 
-// ── Ruleta — descuento y resultado SIEMPRE server-side ──────────
-const RULETA_COSTO = Number(process.env.RULETA_COSTO) || 1700;
-// 10 secciones (orden de la rueda): 5 "nada", 2 "otro_giro", 2 "envio_gratis", 1 "zapas_gratis".
-const WHEEL = ['nada', 'otro_giro', 'nada', 'envio_gratis', 'nada', 'otro_giro', 'nada', 'zapas_gratis', 'nada', 'envio_gratis'];
-// Probabilidades ponderadas (no por cantidad de secciones). Tuneables.
-const PESOS = { nada: 60, otro_giro: 22, envio_gratis: 15, zapas_gratis: 3 };
+// Conserva solo las 10 mejores partidas (por metros) del usuario en la semana.
+async function prunearPartidas(sb, usuarioId) {
+  const desde = semanaDesde();
+  const { data: rows } = await sb.from('puntajes_mensuales')
+    .select('id,metros').eq('usuario_id', usuarioId)
+    .gte('creado_en', desde.toISOString()).order('metros', { ascending: false });
+  if (rows && rows.length > 10) {
+    const sobran = rows.slice(10).map((r) => r.id);
+    await sb.from('puntajes_mensuales').delete().in('id', sobran);
+  }
+}
+
+// ── Comprar 1 corazón (200 monedas, descuenta del saldo guardado) ──
+async function comprarVida(req, res) {
+  if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
+  const u = await usuarioDeReq(req);
+  if (!u) return fail(res, 401, 'No autenticado.');
+  const sb = supa();
+  const { data: ok } = await sb.rpc('gastar_puntos', { p_usuario_id: u.id, p_costo: VIDA_COSTO });
+  if (!ok) return fail(res, 409, `Necesitás ${VIDA_COSTO} monedas para comprar un corazón.`);
+  const { data: cur } = await sb.from('usuarios').select('puntos_disponibles').eq('id', u.id).maybeSingle();
+  json(res, 200, { ok: true, costo: VIDA_COSTO, puntos_disponibles: cur?.puntos_disponibles ?? 0 });
+}
+
+// ── Mis items (canjeables) ──────────────────────────────────────
+async function misItems(req, res) {
+  const u = await usuarioDeReq(req);
+  if (!u) return fail(res, 401, 'No autenticado.');
+  const { data } = await supa().from('items_usuario')
+    .select('id,tipo_item,estado,obtenido_en,canjeado_en')
+    .eq('usuario_id', u.id).order('obtenido_en', { ascending: false }).limit(60);
+  json(res, 200, { ok: true, items: data || [] });
+}
+
+async function reclamarItem(req, res) {
+  if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
+  const u = await usuarioDeReq(req);
+  if (!u) return fail(res, 401, 'No autenticado.');
+  const { id } = await readBody(req);
+  if (!id) return fail(res, 400, 'Falta el item.');
+  const sb = supa();
+  const { data: it } = await sb.from('items_usuario')
+    .select('id,estado,tipo_item').eq('id', id).eq('usuario_id', u.id).maybeSingle();
+  if (!it) return fail(res, 404, 'Item no encontrado.');
+  if (it.estado === 'canjeado') return fail(res, 409, 'Ese premio ya fue reclamado.');
+  await sb.from('items_usuario').update({ estado: 'canjeado', canjeado_en: new Date().toISOString() }).eq('id', id);
+  avisarReclamo(u, it.tipo_item).catch((e) => console.error('[reclamo mail]', e.message));
+  json(res, 200, { ok: true });
+}
+
+// ── Ruleta — 100% server-side (crypto), límites y items ─────────
+const WHEEL = ['nada', 'otro_giro', 'llavero_chunky', 'nada', 'otro_giro', 'envio_gratis', 'nada', 'llavero_chunky', 'otro_giro', 'chunky_bag'];
+const PESOS = { nada: 35, otro_giro: 30, llavero_chunky: 18, envio_gratis: 12, chunky_bag: 5 };
+const ITEM_TIPOS = ['envio_gratis', 'chunky_bag', 'llavero_chunky'];
+const ETIQUETAS = {
+  nada: '¡Casi! Seguí girando',
+  otro_giro: '¡Otro giro gratis!',
+  llavero_chunky: '¡Ganaste un Llavero Chunky!',
+  envio_gratis: '¡Envío gratis en tu próximo pedido!',
+  chunky_bag: '¡Ganaste una Chunky Bag!',
+};
+const NOMBRE_ITEM = { envio_gratis: 'ENVÍO GRATIS en su próximo pedido', chunky_bag: 'una CHUNKY BAG', llavero_chunky: 'un LLAVERO CHUNKY' };
 
 async function ruletaGirar(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
@@ -123,57 +180,76 @@ async function ruletaGirar(req, res) {
   if (!u) return fail(res, 401, 'No autenticado.');
   const sb = supa();
 
-  // Estado fresco (evita pisar valores con un snapshot viejo).
+  // Límite de items guardados (máx 5 disponibles).
+  const { count: itemsDisp } = await sb.from('items_usuario')
+    .select('id', { count: 'exact', head: true }).eq('usuario_id', u.id).eq('estado', 'disponible');
+  if ((itemsDisp || 0) >= MAX_ITEMS) {
+    return fail(res, 409, `Ya tenés el máximo de premios guardados (${MAX_ITEMS}). Canjeá alguno antes de seguir girando.`);
+  }
+
+  // Estado fresco.
   const { data: cur } = await sb.from('usuarios')
-    .select('puntos_disponibles,giros_gratis').eq('id', u.id).maybeSingle();
+    .select('puntos_disponibles,giros_gratis,giros_semana,giros_semana_ref').eq('id', u.id).maybeSingle();
   let pts = cur?.puntos_disponibles || 0;
   let giros = cur?.giros_gratis || 0;
+  const ref = semanaRef();
+  let semCount = cur?.giros_semana_ref === ref ? (cur?.giros_semana || 0) : 0;
 
-  // Cobro: si hay giro gratis se usa; si no, se descuenta el costo.
-  if (giros > 0) giros -= 1;
-  else if (pts >= RULETA_COSTO) pts -= RULETA_COSTO;
-  else return fail(res, 409, `Necesitás ${RULETA_COSTO} puntos para girar.`);
+  // Cobro: giro gratis (no cuenta contra el límite) o pago (cuenta + descuenta).
+  if (giros > 0) {
+    giros -= 1;
+  } else {
+    if (semCount >= LIMITE_GIROS) return fail(res, 409, `Llegaste a los ${LIMITE_GIROS} giros de esta semana. Vuelven a empezar el lunes.`);
+    if (pts < RULETA_COSTO) return fail(res, 409, `Necesitás ${RULETA_COSTO} monedas para girar.`);
+    pts -= RULETA_COSTO;
+    semCount += 1;
+  }
 
-  // Sorteo ponderado + sección de la rueda que coincida.
+  // Sorteo con crypto (nunca Math.random) + sección de la rueda que coincida.
   const resultado = sortearPonderado(PESOS);
   const indices = WHEEL.map((t, i) => (t === resultado ? i : -1)).filter((i) => i >= 0);
-  const seccion = indices[Math.floor(Math.random() * indices.length)];
+  const seccion = indices[crypto.randomInt(indices.length)];
 
-  // Efectos del premio.
+  // Efectos.
   let premio = null;
   if (resultado === 'otro_giro') {
-    giros += 1;                       // "otro giro" SIEMPRE habilita un giro extra
+    giros += 1;
     premio = 'otro_giro';
-  } else if (resultado === 'envio_gratis' || resultado === 'zapas_gratis') {
-    await sb.from('premios_ruleta').insert({ usuario_id: u.id, tipo: resultado });
+  } else if (ITEM_TIPOS.includes(resultado)) {
+    await sb.from('items_usuario').insert({ usuario_id: u.id, tipo_item: resultado });
     premio = resultado;
     avisarPremio(u, resultado).catch((e) => console.error('[ruleta mail]', e.message));
   }
 
-  // Persistir el estado final de una sola vez.
-  await sb.from('usuarios').update({ puntos_disponibles: pts, giros_gratis: giros }).eq('id', u.id);
+  await sb.from('usuarios').update({
+    puntos_disponibles: pts, giros_gratis: giros, giros_semana: semCount, giros_semana_ref: ref,
+  }).eq('id', u.id);
 
   json(res, 200, {
     ok: true, resultado, seccion, etiqueta: ETIQUETAS[resultado], premio,
     puntos_disponibles: pts, giros_gratis: giros,
+    giros_restantes: Math.max(0, LIMITE_GIROS - semCount),
+    items_disponibles: (itemsDisp || 0) + (ITEM_TIPOS.includes(resultado) ? 1 : 0),
   });
 }
 
-const ETIQUETAS = {
-  nada: 'Chunky Bag',
-  otro_giro: '¡Otro giro!',
-  envio_gratis: 'Envío gratis en tu próximo pedido',
-  zapas_gratis: '¡Par de zapas GRATIS!',
-};
-
 async function avisarPremio(u, tipo) {
-  const texto = tipo === 'zapas_gratis' ? 'un PAR DE ZAPAS GRATIS' : 'ENVÍO GRATIS en su próximo pedido';
   await avisarDueno({
     subject: `RULETA — premio: ${tipo}`,
     html: plantilla({
       titulo: 'Premio de la ruleta',
-      cuerpoHtml: `<b>${u.nombre || u.alias || 'Un usuario'}</b> (${u.email}) ganó <b>${texto}</b> en la ruleta.<br><br>
-        Coordiná la entrega del premio. Queda registrado como pendiente en <b>premios_ruleta</b>.`,
+      cuerpoHtml: `<b>${u.nombre || u.alias || 'Un usuario'}</b> (${u.email}) ganó <b>${NOMBRE_ITEM[tipo] || tipo}</b> en la ruleta.<br><br>
+        Queda guardado como item disponible. Cuando lo reclame desde su perfil, coordinás la entrega por Instagram.`,
+    }),
+  });
+}
+async function avisarReclamo(u, tipo) {
+  await avisarDueno({
+    subject: `RECLAMO de premio: ${tipo}`,
+    html: plantilla({
+      titulo: 'Reclamo de premio',
+      cuerpoHtml: `<b>${u.nombre || u.alias || 'Un usuario'}</b> (${u.email}) reclamó <b>${NOMBRE_ITEM[tipo] || tipo}</b>.<br><br>
+        Coordiná la entrega por Instagram (@chunkysnkrs.uy).`,
     }),
   });
 }
@@ -190,26 +266,31 @@ function clampInt(v, min, max) {
   if (!isFinite(n)) return min;
   return Math.max(min, Math.min(max, n));
 }
-function semanaActual() {
-  // Semana ISO (lunes 00:00 local del servidor).
+function semanaDesde() {
+  // Lunes 00:00 (hora del servidor) de la semana en curso.
   const now = new Date();
   const dia = (now.getDay() + 6) % 7; // 0 = lunes
   const desde = new Date(now);
   desde.setHours(0, 0, 0, 0);
   desde.setDate(desde.getDate() - dia);
-  return { desde };
+  return desde;
 }
-function mejorPorUsuario(rows) {
-  const map = new Map();
-  for (const r of rows) {
-    const prev = map.get(r.usuario_id);
-    if (!prev || r.puntaje > prev.puntaje) map.set(r.usuario_id, r);
-  }
-  return [...map.values()].sort((a, b) => b.puntaje - a.puntaje);
+function semanaRef() { return semanaDesde().toISOString().slice(0, 10); }
+
+// Mejor partida (metros) del usuario en la semana + su posición global.
+async function posicionUsuario(sb, usuarioId, desde) {
+  const { data: mb } = await sb.from('puntajes_mensuales')
+    .select('metros').eq('usuario_id', usuarioId).gte('creado_en', desde.toISOString())
+    .order('metros', { ascending: false }).limit(1).maybeSingle();
+  if (!mb) return { posicion: null, mejor: 0 };
+  const { count } = await sb.from('puntajes_mensuales')
+    .select('id', { count: 'exact', head: true })
+    .gte('creado_en', desde.toISOString()).gt('metros', mb.metros);
+  return { posicion: (count || 0) + 1, mejor: mb.metros };
 }
 function sortearPonderado(pesos) {
   const total = Object.values(pesos).reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
-  for (const [k, w] of Object.entries(pesos)) { if ((r -= w) < 0) return k; }
+  let r = crypto.randomInt(total);   // 0..total-1, sin Math.random
+  for (const [k, w] of Object.entries(pesos)) { if (r < w) return k; r -= w; }
   return 'nada';
 }
