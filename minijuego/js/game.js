@@ -11,18 +11,28 @@
   const BONE = '#e8e0d0', RED = '#cc0000', REDM = '#ff3a3a', MUTED = '#5a5a5a', GREEN = '#9bff7a', GOLD = '#ffd35a';
   const DEBUG = !!CR.DEBUG;
 
-  // Banco de trivia anti-bot (la posición correcta se mezcla en cada pregunta).
+  // Banco de trivia de CHECKPOINT — cultura de moda urbana / sneakers.
+  // (La posición correcta se mezcla en cada pregunta; `c` = índice de la
+  //  opción correcta dentro de `o`.)
   const TRIVIA = [
-    { q: '¿De qué ciudad es Chunky Snkrs?', o: ['Montevideo', 'Buenos Aires', 'Madrid'], c: 0 },
-    { q: '¿Qué vende Chunky?', o: ['Zapatillas y streetwear', 'Comida', 'Autos'], c: 0 },
-    { q: 'El runner corre por las calles de…', o: ['MVD', 'NYC', 'Tokio'], c: 0 },
-    { q: '¿Qué juntás en el juego?', o: ['Monedas', 'Estrellas', 'Llaves'], c: 0 },
-    { q: '¿Cómo esquivás la basura?', o: ['Saltando o cambiando de carril', 'Disparando', 'Volando'], c: 0 },
+    { q: '¿De qué color son las Jordan 4 "Black Cat"?', o: ['Negro total', 'Rojo y blanco', 'Azul y gris'], c: 0 },
+    { q: '¿Qué tipo de calzado vende Chunky Snkrs?', o: ['Zapatillas / sneakers', 'Botas de lluvia', 'Ojotas'], c: 0 },
+    { q: '¿Qué marca fabrica las "Air Force 1"?', o: ['Nike', 'Adidas', 'Puma'], c: 0 },
+    { q: 'Las "Yeezy" se diseñaron junto a…', o: ['Kanye West', 'Drake', 'Bad Bunny'], c: 0 },
+    { q: '¿Qué marca tiene las tres tiras?', o: ['Adidas', 'New Balance', 'Vans'], c: 0 },
+    { q: 'El modelo "Chuck Taylor" es de…', o: ['Converse', 'Reebok', 'Fila'], c: 0 },
+    { q: '¿Qué colores lleva la Jordan 1 "Chicago"?', o: ['Rojo, blanco y negro', 'Verde y amarillo', 'Todo azul'], c: 0 },
+    { q: 'Las "Samba" son un clásico de…', o: ['Adidas', 'Nike', 'Asics'], c: 0 },
+    { q: 'En sneakers, ¿qué es una "colab"?', o: ['Colaboración entre marcas/artistas', 'Una zapa rota', 'Un tipo de cordón'], c: 0 },
+    { q: '"Deadstock" quiere decir que la zapa está…', o: ['Nueva, sin usar', 'Muy usada', 'Falsa'], c: 0 },
+    { q: 'Travis Scott es famoso por sus colabs con…', o: ['Nike / Jordan', 'Solo Crocs', 'Gucci'], c: 0 },
+    { q: '¿Qué marca hace las "550"?', o: ['New Balance', 'Nike', 'Adidas'], c: 0 },
+    { q: 'Las "Dunk" son un modelo de…', o: ['Nike', 'Puma', 'Reebok'], c: 0 },
+    { q: 'En sneakers, ¿qué significa "OG"?', o: ['La versión original del modelo', 'Que son caras', 'Que son de cuero'], c: 0 },
+    { q: '¿Cómo se les dice a las zapas falsificadas?', o: ['Réplicas / fakes', 'OG', 'Deadstock'], c: 0 },
     { q: 'El estilo de Chunky es…', o: ['Urbano / Y2K', 'Formal', 'Clásico'], c: 0 },
-    { q: '¿Qué grita el motochorro?', o: ['Dame las zapas', 'Hola', 'Corré'], c: 0 },
-    { q: '¿Para qué sirven las monedas?', o: ['Comprar vidas y girar la ruleta', 'Nada', 'Cambiar de color'], c: 0 },
   ];
-  const TRIVIA_CADA = 280;  // metros entre preguntas (aprox)
+  const CHECKPOINT_CADA = 2200;  // metros entre checkpoints (bien espaciados: >1 min)
 
   let state = 'start';     // 'start' | 'playing' | 'trivia' | 'revivir' | 'over'
   let game = null;
@@ -36,7 +46,7 @@
       t: 0, dist: 0, metros: 0, coins: 0, speed: K.BASE_Z, scroll: 0, cam: 0,
       player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, hopT: 0, shield: false, invuln: 0, run: 0, vidas: 2 },
       obstacles: [], coinsArr: [], powerups: [], particles: [], pops: [],
-      spawnT: 1.0, coinT: 0.8, powerT: 7, triviaAt: TRIVIA_CADA,
+      spawnT: 1.0, coinT: 0.8, powerT: 7, checkpointAt: CHECKPOINT_CADA,
       fx: { mult: 1, sTimer: 0, sLabel: null, sGood: true, rainTimer: 0 },
       banner: null, shake: 0, coinFlash: 0, finalCoins: 0, finalMetros: 0,
     };
@@ -167,8 +177,8 @@
     g.dist += eff * dt; g.scroll += eff * dt;
     g.metros += eff * dt * K.METERS;                 // PUNTAJE = metros (acumula)
 
-    // Trivia anti-bot: pausa y pregunta cada ~TRIVIA_CADA metros.
-    if (g.metros >= g.triviaAt) { g.triviaAt = g.metros + TRIVIA_CADA + Math.random() * 140; mostrarTrivia(); return; }
+    // CHECKPOINT: al alcanzar la marca, pausa y pregunta (bien espaciados).
+    if (g.metros >= g.checkpointAt) { g.checkpointAt = g.metros + CHECKPOINT_CADA + Math.random() * 600; mostrarTrivia(); return; }
 
     // jugador
     p.px += (p.lane - 1 - p.px) * Math.min(1, dt * 17);
@@ -404,7 +414,7 @@
     if (g.banner && g.banner.t > 0) { ctx.globalAlpha = Math.min(1, g.banner.t); pf(g.banner.text, W / 2, 70, 14, g.banner.color, 'center'); ctx.globalAlpha = 1; }
   }
 
-  // ── Trivia (DOM overlay) ──────────────────────────────────────
+  // ── Checkpoint (trivia en overlay DOM) ────────────────────────
   function mostrarTrivia() {
     const el = document.getElementById('trivia');
     if (!el) return;   // sin overlay → seguir sin trivia
@@ -423,11 +433,24 @@
     });
     el.classList.remove('hidden');
   }
+  // Respawn de checkpoint: limpia el camino de obstáculos y da invulnerabilidad
+  // breve. CONSERVA metros, monedas y la velocidad con la que llegaste.
+  // Con `boost` activa el multiplicador 1.5x durante 7 segundos.
+  function checkpointRespawn(boost) {
+    const g = game, p = g.player, fx = g.fx;
+    g.obstacles = []; g.powerups = []; g.spawnT = 1.4; g.shake = 0.2;
+    p.invuln = 1.8; p.shield = false;
+    p.jumping = false; p.jumpOff = 0; p.jumpVel = 0;
+    if (boost) { fx.mult = 1.5; fx.sTimer = 7; fx.sLabel = 'x1.5'; fx.sGood = true; }
+  }
+
   function responderTrivia(ok) {
     const el = document.getElementById('trivia'); if (el) el.classList.add('hidden');
-    if (ok) { game.metros *= 1.5; banner('¡CORRECTO! x1.5 METROS', GREEN); Audio.sfx.good(); }
-    else { banner('Respuesta incorrecta', MUTED); Audio.sfx.bad(); }
     state = 'playing';
+    // El checkpoint siempre limpia el camino (no te frena para matarte al salir).
+    checkpointRespawn(ok);
+    if (ok) { banner('¡CORRECTO! x1.5 · 7s', GREEN); Audio.sfx.good(); }
+    else { banner('Fallaste · camino limpio', MUTED); Audio.sfx.bad(); }
   }
 
   // ── Sin corazones → ofrecer comprar vida (lo resuelve la página) ──
