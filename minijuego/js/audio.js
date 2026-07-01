@@ -20,7 +20,12 @@
     return actx;
   }
 
-  function resume() { if (actx && actx.state === 'suspended') actx.resume(); }
+  // Crea el AudioContext DENTRO del gesto del usuario (requisito de iOS/Android:
+  // si no, arranca 'suspended' y el sonido no suena en el celular).
+  function resume() {
+    const ac = ensure();
+    if (ac.state === 'suspended') ac.resume();
+  }
 
   function tone(o) {
     if (muted) return;

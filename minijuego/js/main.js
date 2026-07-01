@@ -6,6 +6,7 @@
 
   function boot() {
     const canvas = document.getElementById('game');
+    canvas.width = CR.K.W; canvas.height = CR.K.H;   // buffer vertical (config.js)
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     CR.ctx = ctx;

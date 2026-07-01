@@ -9,13 +9,13 @@
     const canvas = document.getElementById('game');
     const muteBtn = document.getElementById('muteBtn');
 
-    // En móvil: pantalla completa + bloquear orientación al empezar a jugar.
+    // En móvil: pantalla completa + bloquear orientación VERTICAL al jugar.
     function enterImmersive() {
       if (!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches)) return;
       try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
-      try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+      try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(() => {}); } catch (e) {}
     }
-    document.getElementById('playBtn').addEventListener('click', () => { enterImmersive(); Game.start(); });
+    document.getElementById('playBtn').addEventListener('click', () => { Audio.resume(); enterImmersive(); Game.start(); });
     document.getElementById('againBtn').addEventListener('click', () => Game.start());
 
     function toggleMute() {
