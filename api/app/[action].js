@@ -74,10 +74,11 @@ async function perfil(req, res) {
 async function ranking(req, res) {
   const sb = supa();
   const desde = semanaDesde();
-  const { data } = await sb.from('puntajes_mensuales')
+  const { data, error } = await sb.from('puntajes_mensuales')
     .select('usuario_id,alias,metros')
     .gte('creado_en', desde.toISOString())
     .order('metros', { ascending: false }).limit(10);
+  if (error) console.error('[ranking] select', error.message);   // columnas faltantes → esquema desactualizado
   const top = (data || []).map((r, i) => ({ pos: i + 1, alias: r.alias || 'jugador', metros: r.metros, usuario_id: r.usuario_id }));
 
   let tu = null;
@@ -100,7 +101,12 @@ async function guardarPuntaje(req, res) {
   const monedas = clampInt(body.monedas != null ? body.monedas : body.puntaje, 0, 100000);
 
   const sb = supa();
-  await sb.from('puntajes_mensuales').insert({ usuario_id: u.id, alias: u.alias, metros, puntaje: monedas });
+  const { error: insErr } = await sb.from('puntajes_mensuales')
+    .insert({ usuario_id: u.id, alias: u.alias, metros, puntaje: monedas });
+  if (insErr) {
+    console.error('[guardar-puntaje] insert', insErr.message);   // p.ej. NOT NULL de jugador_id/mes (esquema viejo)
+    return fail(res, 500, 'No se pudo guardar el puntaje.');
+  }
   await prunearPartidas(sb, u.id);   // dejar solo las 10 mejores de la semana
 
   let saldo = u.puntos_disponibles;
@@ -267,13 +273,13 @@ function clampInt(v, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 function semanaDesde() {
-  // Lunes 00:00 (hora del servidor) de la semana en curso.
-  const now = new Date();
-  const dia = (now.getDay() + 6) % 7; // 0 = lunes
-  const desde = new Date(now);
-  desde.setHours(0, 0, 0, 0);
-  desde.setDate(desde.getDate() - dia);
-  return desde;
+  // Lunes 00:00 de Uruguay (UTC-3 fijo, sin horario de verano), devuelto en UTC.
+  // El servidor (Vercel) corre en UTC; sin esto la semana reiniciaría 3 h antes.
+  const OFFSET_MS = 3 * 60 * 60 * 1000;
+  const mvd = new Date(Date.now() - OFFSET_MS);           // "ahora" como reloj de pared MVD (en campos UTC)
+  const dia = (mvd.getUTCDay() + 6) % 7;                  // 0 = lunes
+  const lunesWall = Date.UTC(mvd.getUTCFullYear(), mvd.getUTCMonth(), mvd.getUTCDate() - dia, 0, 0, 0, 0);
+  return new Date(lunesWall + OFFSET_MS);                 // ese instante, de vuelta en UTC real
 }
 function semanaRef() { return semanaDesde().toISOString().slice(0, 10); }
 

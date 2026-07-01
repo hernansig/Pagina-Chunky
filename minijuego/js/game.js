@@ -47,7 +47,7 @@
       player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, hopT: 0, shield: false, invuln: 0, run: 0, vidas: 2 },
       obstacles: [], coinsArr: [], powerups: [], particles: [], pops: [],
       spawnT: 1.0, coinT: 0.8, powerT: 7, checkpointAt: CHECKPOINT_CADA,
-      fx: { mult: 1, sTimer: 0, sLabel: null, sGood: true, rainTimer: 0 },
+      fx: { mult: 1, sTimer: 0, sLabel: null, sGood: true, rainTimer: 0, scoreMult: 1, scoreMultT: 0 },
       banner: null, shake: 0, coinFlash: 0, finalCoins: 0, finalMetros: 0,
     };
   }
@@ -172,10 +172,12 @@
     g.speed = Math.min(K.CAP_Z, K.BASE_Z + g.t * K.SPEED_RAMP);
     if (fx.sTimer > 0) { fx.sTimer -= dt; if (fx.sTimer <= 0) { fx.mult = 1; fx.sLabel = null; } }
     if (fx.rainTimer > 0) fx.rainTimer -= dt;
+    // Ítem-boost de checkpoint: multiplica los METROS ganados (no la velocidad).
+    if (fx.scoreMultT > 0) { fx.scoreMultT -= dt; if (fx.scoreMultT <= 0) fx.scoreMult = 1; }
     const eff = g.speed * Math.min(K.MULT_MAX, fx.mult);
 
     g.dist += eff * dt; g.scroll += eff * dt;
-    g.metros += eff * dt * K.METERS;                 // PUNTAJE = metros (acumula)
+    g.metros += eff * dt * K.METERS * fx.scoreMult;  // PUNTAJE = metros (×boost si activo)
 
     // CHECKPOINT: al alcanzar la marca, pausa y pregunta (bien espaciados).
     if (g.metros >= g.checkpointAt) { g.checkpointAt = g.metros + CHECKPOINT_CADA + Math.random() * 600; mostrarTrivia(); return; }
@@ -409,6 +411,7 @@
     for (let i = 0; i < p.vidas; i++) drawHeart(ctx, 24 + i * 26, 24, 10, RED);
     let y = 44;
     if (p.shield) { pf('◈ ESCUDO', 16, y, 11, BONE); y += 22; }
+    if (g.fx.scoreMultT > 0) { pf('x1.5 METROS ' + Math.ceil(g.fx.scoreMultT) + 's', 16, y, 11, GREEN); y += 22; }
     if (g.fx.sTimer > 0) { pf((g.fx.sGood ? '▲ ' : '▼ ') + g.fx.sLabel, 16, y, 11, g.fx.sGood ? BONE : REDM); y += 22; }
     if (g.fx.rainTimer > 0) { pf('LLUVIA', 16, y, 11, REDM); }
     if (g.banner && g.banner.t > 0) { ctx.globalAlpha = Math.min(1, g.banner.t); pf(g.banner.text, W / 2, 70, 14, g.banner.color, 'center'); ctx.globalAlpha = 1; }
@@ -435,13 +438,14 @@
   }
   // Respawn de checkpoint: limpia el camino de obstáculos y da invulnerabilidad
   // breve. CONSERVA metros, monedas y la velocidad con la que llegaste.
-  // Con `boost` activa el multiplicador 1.5x durante 7 segundos.
+  // Con `boost` activa un ítem que suma x1.5 METROS por metro recorrido durante
+  // 7 s (estilo Subway Surfers: NO acelera el juego ni toca lo ya recorrido).
   function checkpointRespawn(boost) {
     const g = game, p = g.player, fx = g.fx;
     g.obstacles = []; g.powerups = []; g.spawnT = 1.4; g.shake = 0.2;
     p.invuln = 1.8; p.shield = false;
     p.jumping = false; p.jumpOff = 0; p.jumpVel = 0;
-    if (boost) { fx.mult = 1.5; fx.sTimer = 7; fx.sLabel = 'x1.5'; fx.sGood = true; }
+    if (boost) { fx.scoreMult = 1.5; fx.scoreMultT = 7; }
   }
 
   function responderTrivia(ok) {
@@ -449,7 +453,7 @@
     state = 'playing';
     // El checkpoint siempre limpia el camino (no te frena para matarte al salir).
     checkpointRespawn(ok);
-    if (ok) { banner('¡CORRECTO! x1.5 · 7s', GREEN); Audio.sfx.good(); }
+    if (ok) { banner('¡CORRECTO! x1.5 METROS · 7s', GREEN); Audio.sfx.good(); }
     else { banner('Fallaste · camino limpio', MUTED); Audio.sfx.bad(); }
   }
 
