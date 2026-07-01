@@ -21,15 +21,15 @@ window.CR = window.CR || {};
     } else {
       r = 16 / 9;                            // marco vertical en desktop
     }
-    r = Math.min(2.3, Math.max(1.3, r));     // clamp a un vertical sensato
+    r = Math.min(2.0, Math.max(1.4, r));     // clamp a un vertical sensato (no tan estirado)
     return Math.round(W * r);
   }
   const H = altoVertical();
 
   CR.K = {
     W, H,
-    HORIZON: Math.round(H * 0.28),  // y del punto de fuga (~28% desde arriba)
-    NEAR_Y: Math.round(H * 1.03),   // y del piso a z=0 (apenas fuera de cuadro)
+    HORIZON: Math.round(H * 0.30),  // y del punto de fuga (~30% desde arriba)
+    NEAR_Y: Math.round(H * 0.88),   // y del piso a z=0 (deja piso en primer plano; sube al jugador)
     CAM: 2.3,             // constante de cámara (perspectiva)
     LANE_DX: 168,         // separación de carriles (cerca)
     ROAD_HALF: 168 * 1.5, // medio ancho de calzada
