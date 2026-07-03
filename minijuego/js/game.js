@@ -38,6 +38,17 @@
   let game = null;
   let vignette = null;
 
+  // ── MODO DIOS (comando oculto, para testear) ─────────────────
+  // Inmune a los obstáculos. Se activa con: la URL #dios (o ?dios=1),
+  // tipeando "dios" con el teclado, o CR.Game.dios() en la consola.
+  // Las partidas donde estuvo activo NO se guardan en el ranking.
+  let dios = false;
+  function toggleDios() {
+    dios = !dios;
+    if (game) { game.trucada = game.trucada || dios; banner(dios ? '★ MODO DIOS: ON' : 'MODO DIOS: OFF', GOLD); }
+    return dios;
+  }
+
   function rnd(n) { return (Math.random() * n) | 0; }
 
   // ── Estado de partida ─────────────────────────────────────────
@@ -46,7 +57,7 @@
       t: 0, dist: 0, metros: 0, coins: 0, speed: K.BASE_Z, scroll: 0, cam: 0,
       player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, jumpPrev: 0, hopT: 0, shield: false, invuln: 0, run: 0, vidas: 2 },
       obstacles: [], coinsArr: [], powerups: [], particles: [], pops: [],
-      spawnT: 1.0, coinT: 0.8, powerT: 7,
+      spawnT: 1.0, coinT: 0.8, powerT: 7, trucada: false,
       checkpointAt: CHECKPOINT_CADA, checkpointFrom: 0, checkpointNum: 0,
       fx: { mult: 1, sTimer: 0, sLabel: null, sGood: true, rainTimer: 0, scoreMult: 1, scoreMultT: 0 },
       banner: null, shake: 0, coinFlash: 0, finalCoins: 0, finalMetros: 0,
@@ -213,6 +224,8 @@
     for (const pt of g.particles) { pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 760 * dt; pt.life -= dt; }
     for (const pk of g.pops) { pk.y -= 40 * dt; pk.life -= dt; }
 
+    if (dios) g.trucada = true;   // quedó marcada: no se guarda en el ranking
+
     // ── colisiones con obstáculos (cruce de plano) ──
     for (const o of g.obstacles) {
       if (o.hit || o.z > K.HIT_Z) continue;
@@ -220,6 +233,7 @@
       if (o.lane !== p.lane) continue;
       if (o.jumpable && p.jumpOff > 30) continue;
       if (p.invuln > 0) continue;
+      if (dios) continue;         // modo dios: los obstáculos no hacen nada
       if (p.shield) { p.shield = false; p.invuln = 1.0; g.shake = 0.25; o.z = -1; burst(K.PLAYER_X, groundY(K.PLAYER_Z) - 70, BONE, 14); banner('¡ESCUDO ROTO!', BONE); Audio.sfx.hit(); }
       else {
         o.z = -1; p.vidas -= 1;
@@ -399,6 +413,8 @@
     ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
 
     if (state !== 'start') drawHUD();
+    // feedback del modo dios también en la pantalla de inicio
+    else if (dios) pf('★ MODO DIOS ACTIVADO', W / 2, H - 90, 11, GOLD, 'center');
   }
 
   function drawHero() {
@@ -425,6 +441,7 @@
     // corazones (vidas) — abajo a la izquierda, con margen del borde
     const hy = H - 56;
     for (let i = 0; i < p.vidas; i++) drawHeart(ctx, 30 + i * 30, hy, 11, RED);
+    if (dios) pf('★ INMUNE', 18, hy - 34, 9, GOLD);
     // ── Barra de progreso al PRÓXIMO checkpoint ──
     // (checkpoints infinitos: ver comentario en update(); el nº solo crece)
     const cpSpan = Math.max(1, g.checkpointAt - g.checkpointFrom);
@@ -528,8 +545,11 @@
     const goD = document.getElementById('goDist'); if (goD) goD.textContent = metros;
     const goC = document.getElementById('goCoins'); if (goC) goC.textContent = coins;
     const stt = document.getElementById('saveStatus');
-    if (stt) stt.textContent = 'Guardando...';
-    if (Board.save) {
+    if (game.trucada) {
+      // partida con modo dios: no se banca ni entra al ranking
+      if (stt) stt.textContent = 'modo dios: partida de prueba, no se guarda';
+    } else if (Board.save) {
+      if (stt) stt.textContent = 'Guardando...';
       Board.save(metros, coins).then((r) => { if (stt) stt.textContent = r ? '✓ partida guardada' : 'No se pudo guardar (revisá tu sesión)'; });
     }
     if (Board.render) Board.render();
@@ -538,8 +558,17 @@
 
   CR.Game = {
     newGame, tick, render, start, moveLane, jump, revivir, terminar,
+    dios: toggleDios,
     getState: () => state, getRun: () => ({ metros: Math.floor(game.metros), coins: game.coins, vidas: game.player.vidas }),
     gastarMonedas: (n) => { if (game && game.coins >= n) { game.coins -= n; return true; } return false; },
-    init() { game = newGame(); },
+    init() {
+      game = newGame();
+      // comando oculto por URL: /minijuego/jugar#dios  (o ?dios=1)
+      try {
+        const porHash = location.hash.replace('#', '').toLowerCase() === 'dios';
+        const porQuery = new URLSearchParams(location.search).get('dios') != null;
+        if ((porHash || porQuery) && !dios) toggleDios();
+      } catch (e) {}
+    },
   };
 })(window.CR);

@@ -26,10 +26,15 @@
     muteBtn.addEventListener('click', toggleMute);
 
     // ── teclado ──
+    let seq = '';   // buffer del comando oculto (tipear "dios" = inmunidad)
     window.addEventListener('keydown', e => {
       const k = e.key;
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(k)) e.preventDefault();
       if (e.repeat) return;
+      if (k.length === 1) {
+        seq = (seq + k.toLowerCase()).slice(-4);
+        if (seq === 'dios') { seq = ''; Game.dios(); }
+      }
       Audio.resume();
       if (k.toLowerCase() === 'm') { toggleMute(); return; }
       const st = Game.getState();
