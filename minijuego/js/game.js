@@ -487,6 +487,7 @@
   // ── Flujo de pantallas ────────────────────────────────────────
   function start() {
     Audio.resume();
+    if (Audio.startMusic) Audio.startMusic();
     game = newGame(); state = 'playing';
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('overScreen').classList.add('hidden');
@@ -496,6 +497,7 @@
   // Game over FINAL: guarda la partida (metros) + banca las monedas. Una sola vez.
   function endGame() {
     state = 'over'; game.shake = 0.3; Audio.sfx.bad();
+    if (Audio.stopMusic) Audio.stopMusic();
     const metros = Math.floor(game.metros), coins = game.coins;
     game.finalMetros = metros; game.finalCoins = coins;
     const goD = document.getElementById('goDist'); if (goD) goD.textContent = metros;

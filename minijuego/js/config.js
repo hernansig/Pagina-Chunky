@@ -12,10 +12,10 @@ window.CR = window.CR || {};
   // el celular sin deformar: en móvil usamos siempre el aspecto vertical del
   // device (aunque esté de costado), en desktop un marco 9:16.
   const W = 960;
+  const MOBILE = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
   function altoVertical() {
-    const mobile = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
     let r;  // alto / ancho
-    if (mobile) {
+    if (MOBILE) {
       const a = window.innerWidth || 400, b = window.innerHeight || 800;
       r = Math.max(a, b) / Math.min(a, b);   // aspecto vertical del device
     } else {
@@ -25,20 +25,24 @@ window.CR = window.CR || {};
     return Math.round(W * r);
   }
   const H = altoVertical();
+  // En celular ACERCAMOS la cámara: carriles más anchos + sprites más grandes,
+  // para que los obstáculos se vean mejor (el buffer 960 se muestra chico en el
+  // teléfono). En desktop se mantiene el tuning original.
+  const LANE = MOBILE ? 188 : 168;
 
   CR.K = {
     W, H,
     HORIZON: Math.round(H * 0.30),  // y del punto de fuga (~30% desde arriba)
     NEAR_Y: Math.round(H * 0.88),   // y del piso a z=0 (deja piso en primer plano; sube al jugador)
     CAM: 2.3,             // constante de cámara (perspectiva)
-    LANE_DX: 168,         // separación de carriles (cerca)
-    ROAD_HALF: 168 * 1.5, // medio ancho de calzada
+    LANE_DX: LANE,        // separación de carriles (cerca)
+    ROAD_HALF: LANE * 1.5, // medio ancho de calzada
     PLAYER_X: W / 2,
     PLAYER_Z: 0.15,       // profundidad de dibujo del héroe
     HIT_Z: 0.2,           // plano donde se evalúa el choque
     COLLECT_Z: 0.6,       // ventana de recolección de monedas/power-ups (ancha = más frames para alinearse)
     REMOVE_Z: 0.06,
-    OBJ_SCALE: 1.7, PLAYER_SCALE: 1.85,
+    OBJ_SCALE: MOBILE ? 2.15 : 1.7, PLAYER_SCALE: MOBILE ? 2.25 : 1.85,
     BASE_Z: 3.2, CAP_Z: 9.5, MULT_MAX: 1.5,  // velocidad en z/seg (arranca y sube más rápido)
     SPEED_RAMP: 0.22,                         // +z/seg por segundo de partida
     METERS: 3.2,                              // z → metros (distancia para ranking mensual)
