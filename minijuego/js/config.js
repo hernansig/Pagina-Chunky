@@ -32,7 +32,7 @@ window.CR = window.CR || {};
 
   CR.K = {
     W, H,
-    HORIZON: Math.round(H * 0.30),  // y del punto de fuga (~30% desde arriba)
+    HORIZON: Math.round(H * 0.40),  // y del punto de fuga (~30% desde arriba)
     NEAR_Y: Math.round(H * 0.88),   // y del piso a z=0 (deja piso en primer plano; sube al jugador)
     CAM: 2.3,             // constante de cámara (perspectiva)
     LANE_DX: LANE,        // separación de carriles (cerca)
