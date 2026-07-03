@@ -4,19 +4,28 @@ import { crearPreferencia } from '../lib/mercadopago.js';
 import { generarCodigoPedido } from '../lib/util.js';
 
 // POST /api/crear-pago
-// body: { producto_id, cantidad?, nombre?, email }
+// body carrito:  { items: [{producto_id, variante_id?, cantidad}], nombre?, email, direccion }
+// body clásico:  { producto_id, cantidad?, nombre?, email, direccion }   (compat)
 // Crea un pedido en estado "pendiente" y devuelve el init_point de MercadoPago.
 // El stock NO se descuenta acá: la única fuente de verdad es el webhook.
 export default async function handler(req, res) {
   if (methodNotAllowed(req, res, 'POST')) return;
   try {
     const body = await readBody(req);
-    const productoId = body.producto_id;
-    const cantidad = Math.max(1, parseInt(body.cantidad, 10) || 1);
     const email = (body.email || '').trim();
     const nombre = (body.nombre || '').trim() || null;
 
-    if (!productoId) return fail(res, 400, 'Falta el producto.');
+    // Normalizar: carrito (items[]) o producto único (compat).
+    let lineas = Array.isArray(body.items) && body.items.length
+      ? body.items
+      : (body.producto_id ? [{ producto_id: body.producto_id, cantidad: body.cantidad }] : []);
+    lineas = lineas.slice(0, 20).map((l) => ({
+      producto_id: l.producto_id,
+      variante_id: l.variante_id || null,
+      cantidad: Math.min(10, Math.max(1, parseInt(l.cantidad, 10) || 1)),
+    }));
+
+    if (!lineas.length || lineas.some((l) => !l.producto_id)) return fail(res, 400, 'Falta el producto.');
     if (!isEmail(email)) return fail(res, 400, 'Email inválido.');
 
     // Datos de envío (obligatorios: se manda apenas se confirma el pago).
@@ -39,23 +48,56 @@ export default async function handler(req, res) {
     }
 
     const sb = supa();
-    const { data: producto, error: e1 } = await sb
+    const { data: productos, error: e1 } = await sb
       .from('productos')
-      .select('id,nombre,precio,stock_disponible,activo')
-      .eq('id', productoId)
-      .maybeSingle();
+      .select('id,nombre,precio,talle,stock_disponible,activo')
+      .in('id', lineas.map((l) => l.producto_id));
     if (e1) throw e1;
-    if (!producto || !producto.activo) return fail(res, 404, 'Producto no disponible.');
-    if (producto.stock_disponible < cantidad) return fail(res, 409, 'Sin stock disponible.');
+    const porId = Object.fromEntries((productos || []).map((p) => [p.id, p]));
+
+    // Variantes de las líneas que las usan (stock propio por variante).
+    const varIds = lineas.filter((l) => l.variante_id).map((l) => l.variante_id);
+    let varPorId = {};
+    if (varIds.length) {
+      const { data: vars, error: eV } = await sb
+        .from('producto_variantes')
+        .select('id,producto_id,atributo,valor,stock_disponible,activo')
+        .in('id', varIds);
+      if (eV) throw eV;
+      varPorId = Object.fromEntries((vars || []).map((v) => [v.id, v]));
+    }
+
+    // Validar cada línea y armar los items del pedido.
+    const itemsPedido = [];
+    let montoTotal = 0;
+    for (const l of lineas) {
+      const producto = porId[l.producto_id];
+      if (!producto || !producto.activo) return fail(res, 404, 'Producto no disponible.');
+      let variante = null;
+      if (l.variante_id) {
+        variante = varPorId[l.variante_id];
+        if (!variante || !variante.activo || variante.producto_id !== producto.id) {
+          return fail(res, 404, `La variante elegida de "${producto.nombre}" ya no está disponible.`);
+        }
+        if (variante.stock_disponible < l.cantidad) {
+          return fail(res, 409, `Sin stock de ${producto.nombre} (${variante.valor}).`);
+        }
+      } else if (producto.stock_disponible < l.cantidad) {
+        return fail(res, 409, `Sin stock disponible de ${producto.nombre}.`);
+      }
+      itemsPedido.push({
+        producto_id: producto.id,
+        variante_id: variante ? variante.id : null,
+        variante: variante ? `${variante.atributo} ${variante.valor}` : null,
+        nombre: producto.nombre,
+        talle: producto.talle || null,
+        precio: Number(producto.precio),
+        cantidad: l.cantidad,
+      });
+      montoTotal += Number(producto.precio) * l.cantidad;
+    }
 
     const codigo = generarCodigoPedido();
-    const itemPedido = {
-      producto_id: producto.id,
-      nombre: producto.nombre,
-      precio: Number(producto.precio),
-      cantidad,
-    };
-    const montoTotal = Number(producto.precio) * cantidad;
 
     const { data: pedido, error: e2 } = await sb
       .from('pedidos')
@@ -64,7 +106,7 @@ export default async function handler(req, res) {
         cliente_nombre: nombre,
         cliente_contacto: email,
         direccion_envio: direccion,
-        productos: [itemPedido],
+        productos: itemsPedido,
         monto_total: montoTotal,
         estado_pago: 'pendiente',
         estado_envio: 'preparando',
@@ -74,7 +116,12 @@ export default async function handler(req, res) {
     if (e2) throw e2;
 
     const pref = await crearPreferencia({
-      items: [{ id: producto.id, nombre: producto.nombre, precio: Number(producto.precio), cantidad }],
+      items: itemsPedido.map((it) => ({
+        id: it.variante_id || it.producto_id,
+        nombre: it.variante ? `${it.nombre} (${it.variante})` : it.nombre,
+        precio: it.precio,
+        cantidad: it.cantidad,
+      })),
       codigoPedido: codigo,
       payerEmail: email,
     });

@@ -58,12 +58,20 @@ export default async function handler(req, res) {
         .update({ estado_pago: 'pagado', mp_payment_id: String(dataId) })
         .eq('id', pedido.id);
 
-      // Descontar stock de cada producto (función atómica).
+      // Descontar stock (funciones atómicas). Si el item tiene variante,
+      // se descuenta de la VARIANTE comprada, no del producto general.
       for (const item of pedido.productos || []) {
-        await sb.rpc('descontar_stock', {
-          p_producto_id: item.producto_id,
-          p_cantidad: item.cantidad || 1,
-        });
+        if (item.variante_id) {
+          await sb.rpc('descontar_stock_variante', {
+            p_variante_id: item.variante_id,
+            p_cantidad: item.cantidad || 1,
+          });
+        } else {
+          await sb.rpc('descontar_stock', {
+            p_producto_id: item.producto_id,
+            p_cantidad: item.cantidad || 1,
+          });
+        }
       }
       // Marcar reservas activas de esos productos como convertidas.
       for (const item of pedido.productos || []) {
@@ -106,7 +114,7 @@ export default async function handler(req, res) {
 async function notificarPagoConfirmado(pedido) {
   const site = (process.env.SITE_URL || '').replace(/\/$/, '');
   const lista = (pedido.productos || [])
-    .map((p) => `${p.nombre}${p.talle ? ` (T ${p.talle})` : ''} × ${p.cantidad || 1}`)
+    .map((p) => `${p.nombre}${p.variante ? ` (${p.variante})` : p.talle ? ` (T ${p.talle})` : ''} × ${p.cantidad || 1}`)
     .join('<br>');
 
   // Cliente

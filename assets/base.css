@@ -249,6 +249,78 @@ footer { border-top: 1px solid var(--bordo); padding: 50px 20px 40px; text-align
 /* ESTADOS / LOADING */
 .cargando { text-align: center; padding: 60px 0; color: var(--muted); font-family: 'Bebas Neue', sans-serif; letter-spacing: 4px; font-size: 18px; text-transform: uppercase; }
 
+/* CARRITO */
+.nav-cart {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--bordo); color: var(--bone);
+  padding: 6px 10px; cursor: pointer; transition: border-color .15s, color .15s;
+}
+.nav-cart:hover { border-color: var(--red); color: var(--red); }
+.cart-badge {
+  position: absolute; top: -7px; right: -7px; min-width: 17px; height: 17px;
+  background: var(--red); color: #fff; font-family: 'Oswald', sans-serif; font-size: 11px;
+  line-height: 17px; text-align: center; border-radius: 50%; padding: 0 3px;
+}
+.cart-overlay {
+  position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.7);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.cart-overlay.abierto { opacity: 1; pointer-events: auto; }
+.cart-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 401;
+  width: min(420px, 92vw); background: var(--carbon); border-left: 1px solid var(--red);
+  display: flex; flex-direction: column;
+  transform: translateX(102%); transition: transform .28s ease;
+}
+.cart-drawer.abierto { transform: translateX(0); }
+.cart-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid var(--bordo); }
+.cart-title { font-family: 'Permanent Marker', cursive; font-size: 22px; color: var(--white); }
+.cart-title span { color: var(--red); }
+.cart-close { background: none; border: none; color: var(--muted); font-size: 26px; cursor: pointer; line-height: 1; }
+.cart-close:hover { color: var(--red); }
+.cart-items { flex: 1; overflow-y: auto; padding: 14px 20px; }
+.cart-vacio { text-align: center; color: var(--muted); font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; font-size: 16px; padding: 50px 0; line-height: 2; }
+.cart-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #1c1c1c; }
+.cart-item img, .cart-item-ph { width: 54px; height: 54px; object-fit: cover; background: var(--dark); flex-shrink: 0; border: 1px solid #1c1c1c; }
+.cart-item-info { flex: 1; min-width: 0; }
+.cart-item-name { font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 1px; color: var(--white); text-transform: uppercase; line-height: 1.15; }
+.cart-item-var { font-family: 'Oswald', sans-serif; font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+.cart-item-precio { font-family: 'Bebas Neue', sans-serif; font-size: 16px; color: var(--red); margin-top: 3px; }
+.cart-item-qty { display: flex; align-items: center; gap: 8px; font-family: 'Oswald', sans-serif; font-size: 14px; }
+.qty-btn { width: 24px; height: 24px; background: var(--dark); border: 1px solid #2a2a2a; color: var(--bone); cursor: pointer; font-size: 14px; line-height: 1; }
+.qty-btn:hover { border-color: var(--red); color: var(--red); }
+.cart-item-x { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
+.cart-item-x:hover { color: var(--red); }
+.cart-foot { padding: 16px 20px 20px; border-top: 1px solid var(--bordo); max-height: 70vh; overflow-y: auto; }
+.cart-total-row { display: flex; justify-content: space-between; font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; color: var(--bone); margin-bottom: 12px; }
+.cart-total { color: var(--red); font-size: 22px; }
+.cart-form { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.cart-form-2col { display: flex; gap: 10px; }
+.cart-form-2col .form-field { flex: 1; }
+.cart-msg { text-align: center; }
+
+/* selector de variante en la card del catálogo */
+.var-select {
+  width: 100%; margin-top: 10px;
+  background: var(--dark); border: 1px solid #272727; border-top-color: var(--bordo);
+  color: var(--bone); font-family: 'Oswald', sans-serif; font-size: 13px; padding: 7px 8px; outline: none;
+}
+.var-select:focus { border-color: var(--red); }
+
+/* TRANSICIÓN ENTRE PÁGINAS (logo + fade) */
+.page-fade {
+  position: fixed; inset: 0; z-index: 9999; background: #050505;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 1; pointer-events: auto; transition: opacity .45s ease;
+}
+.page-fade.oculto { opacity: 0; pointer-events: none; }
+.page-fade.saliendo { transition: opacity .18s ease; }
+.pf-logo {
+  font-family: 'Permanent Marker', cursive; font-size: clamp(34px, 8vw, 76px);
+  color: var(--white); letter-spacing: -2px; text-transform: uppercase; text-align: center;
+  text-shadow: 0 0 18px rgba(204,0,0,0.75), 3px 3px 0 var(--deep-red);
+}
+
 /* RESEÑAS */
 .resenas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .resena { border: 1px solid #1c1c1c; border-top: 2px solid var(--bordo); background: var(--carbon); padding: 18px; }

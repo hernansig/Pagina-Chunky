@@ -109,7 +109,11 @@
       <a class="nav-logo" href="/">CHUNKY</a>
       <div class="nav-links">
         ${links.map(([href, txt]) => `<a href="${href}" class="${path === href ? 'activo' : ''}">${txt}</a>`).join('')}
-      </div>`;
+      </div>
+      <button class="nav-cart" aria-label="Carrito" title="Carrito">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l2.6 12.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20.5 8H6"/><circle cx="10.5" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/></svg>
+        <span class="cart-badge" style="display:none">0</span>
+      </button>`;
     const wrapper = document.querySelector('.wrapper') || document.body;
     const ticker = wrapper.querySelector('.ticker-wrap');
     if (ticker) ticker.after(nav); else wrapper.prepend(nav);
@@ -183,7 +187,58 @@
     document.head.appendChild(s);
   }
 
-  function init() { inyectarFondo(); inyectarNav(); inyectarFooter(); inyectarCookies(); cargarAuth(); }
+  // Carga el módulo del carrito (badge del nav + drawer + checkout).
+  function cargarCart() {
+    if (window.CHKCart || document.querySelector('script[data-chk-cart]')) return;
+    const s = document.createElement('script');
+    s.src = '/assets/cart.js'; s.setAttribute('data-chk-cart', '1');
+    document.head.appendChild(s);
+  }
+
+  // ── Transición entre páginas: logo sobre negro + fade ─────
+  // Al hacer clic en un link interno se muestra la capa (fade-in corto) y se
+  // navega; la página de destino detecta la marca en sessionStorage y arranca
+  // con la capa visible, desvaneciéndola (~450 ms) apenas el DOM está listo.
+  function transicionPaginas() {
+    const ov = document.createElement('div');
+    ov.className = 'page-fade oculto';
+    ov.innerHTML = '<div class="pf-logo">CHUNKY SNKRS</div>';
+    document.body.appendChild(ov);
+    let saliendo = false;
+
+    // llegada desde navegación interna → fade out de entrada
+    let interno = false;
+    try { interno = sessionStorage.getItem('chk_nav') === '1'; sessionStorage.removeItem('chk_nav'); } catch {}
+    if (interno) {
+      ov.classList.remove('oculto');
+      requestAnimationFrame(() => requestAnimationFrame(() => ov.classList.add('oculto')));
+    }
+
+    // salida: cualquier link interno de la misma pestaña
+    document.addEventListener('click', (e) => {
+      const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a || saliendo) return;
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (a.target === '_blank' || a.hasAttribute('download')) return;
+      let url;
+      try { url = new URL(a.href, location.href); } catch { return; }
+      if (url.origin !== location.origin) return;
+      if (url.pathname === location.pathname && url.hash) return;   // ancla interna
+      e.preventDefault();
+      saliendo = true;
+      try { sessionStorage.setItem('chk_nav', '1'); } catch {}
+      ov.classList.remove('oculto');
+      ov.classList.add('saliendo');
+      setTimeout(() => { location.href = url.href; }, 180);
+    });
+
+    // volver con el botón atrás (bfcache) → nunca dejar la capa pegada
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) { ov.classList.remove('saliendo'); ov.classList.add('oculto'); saliendo = false; }
+    });
+  }
+
+  function init() { inyectarFondo(); inyectarNav(); inyectarFooter(); inyectarCookies(); cargarAuth(); cargarCart(); transicionPaginas(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

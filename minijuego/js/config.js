@@ -32,8 +32,11 @@ window.CR = window.CR || {};
 
   CR.K = {
     W, H,
-    HORIZON: Math.round(H * 0.40),  // y del punto de fuga (~30% desde arriba)
-    NEAR_Y: Math.round(H * 0.88),   // y del piso a z=0 (deja piso en primer plano; sube al jugador)
+    HORIZON: Math.round(H * 0.40),  // y del punto de fuga (~40% desde arriba)
+    // NEAR_Y = y del piso a z=0. En 0.78 el héroe queda centrado-bajo en la
+    // pantalla (estilo Subway Surfers), no pegado al borde inferior, y la
+    // calzada ocupa un tramo más corto → la escena no se ve estirada.
+    NEAR_Y: Math.round(H * 0.78),
     CAM: 2.3,             // constante de cámara (perspectiva)
     LANE_DX: LANE,        // separación de carriles (cerca)
     ROAD_HALF: LANE * 1.5, // medio ancho de calzada
@@ -41,7 +44,7 @@ window.CR = window.CR || {};
     PLAYER_Z: 0.15,       // profundidad de dibujo del héroe
     HIT_Z: 0.2,           // plano donde se evalúa el choque
     COLLECT_Z: 0.6,       // ventana de recolección de monedas/power-ups (ancha = más frames para alinearse)
-    REMOVE_Z: 0.06,
+    REMOVE_Z: -0.55,      // <0: lo no agarrado sigue de largo detrás del héroe y sale por abajo
     OBJ_SCALE: MOBILE ? 2.15 : 1.7, PLAYER_SCALE: MOBILE ? 2.25 : 1.85,
     BASE_Z: 3.2, CAP_Z: 9.5, MULT_MAX: 1.5,  // velocidad en z/seg (arranca y sube más rápido)
     SPEED_RAMP: 0.22,                         // +z/seg por segundo de partida

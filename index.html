@@ -129,18 +129,32 @@ const FALLBACK = [
 const grid = document.getElementById('grid');
 
 function cardHTML(p) {
-  const agotado = !p.fallback && p.stock_disponible <= 0;
+  const conVars = !p.fallback && Array.isArray(p.variantes) && p.variantes.length > 0;
+  // Con variantes, "agotado" = todas las variantes sin stock.
+  const agotado = !p.fallback && (conVars
+    ? p.variantes.every(v => v.stock_disponible <= 0)
+    : p.stock_disponible <= 0);
   const img = p.foto_url
     ? `<img class="card-img" src="${p.foto_url}" alt="${escapeAttr(p.nombre)}" loading="lazy">`
     : `<div class="card-placeholder"><div class="ph-tag">Foto próximamente</div><div class="ph-name">${escapeHtml(p.nombre)}</div></div>`;
-  let acciones;
+  let acciones, selector = '';
   if (p.fallback) {
     acciones = `<a class="btn" href="${CHK.IG}" target="_blank" rel="noopener"><span>Consultar</span></a>`;
   } else if (agotado) {
     acciones = `<button class="btn" disabled><span>Agotado</span></button>`;
   } else {
+    if (conVars) {
+      let primero = true;
+      selector = `<select class="var-select" aria-label="Elegí la variante">${p.variantes.map(v => {
+        const sinStock = v.stock_disponible <= 0;
+        const label = `${v.atributo} ${v.valor}`;
+        const sel = !sinStock && primero ? ' selected' : '';
+        if (!sinStock) primero = false;
+        return `<option value="${escapeAttr(v.id)}" data-label="${escapeAttr(label)}"${sinStock ? ' disabled' : ''}${sel}>${escapeHtml(label)}${sinStock ? ' — agotado' : ''}</option>`;
+      }).join('')}</select>`;
+    }
     acciones = `
-      <button class="btn" data-accion="comprar"><span>Comprar</span></button>
+      <button class="btn" data-accion="carrito"><span>Agregar al carrito</span></button>
       <button class="btn ghost" data-accion="reservar"><span>Reservar</span></button>`;
   }
   return `
@@ -152,9 +166,28 @@ function cardHTML(p) {
           <span class="card-size">${p.talle && p.talle !== '—' ? 'T ' + escapeHtml(p.talle) : '—'}</span>
           <span class="card-price">${CHK.money(p.precio)}</span>
         </div>
+        ${selector}
         <div class="card-actions">${acciones}</div>
       </div>
     </div>`;
+}
+
+// Agrega el producto (con la variante elegida, si hay) al carrito.
+function agregarAlCarrito(card, p) {
+  if (!window.CHKCart) { CHK.toast('El carrito todavía está cargando, probá de nuevo.'); return; }
+  let variante_id = null, variante = null;
+  const sel = card.querySelector('.var-select');
+  if (sel) {
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || opt.disabled) { CHK.toast('Esa variante está agotada.'); return; }
+    variante_id = opt.value;
+    variante = opt.dataset.label;
+  }
+  CHKCart.add({
+    producto_id: p.id, variante_id, variante,
+    nombre: p.nombre, precio: Number(p.precio), foto_url: p.foto_url || null,
+  });
+  CHK.toast('Agregado al carrito ✓');
 }
 
 function render(productos) {
@@ -163,7 +196,10 @@ function render(productos) {
   [...grid.querySelectorAll('.card')].forEach((card, i) => {
     const p = productos[i];
     card.querySelectorAll('[data-accion]').forEach(btn => {
-      btn.addEventListener('click', () => abrirModal(btn.dataset.accion, p));
+      btn.addEventListener('click', () => {
+        if (btn.dataset.accion === 'carrito') agregarAlCarrito(card, p);
+        else abrirModal(btn.dataset.accion, p);
+      });
     });
   });
 }

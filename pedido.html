@@ -77,7 +77,7 @@ function render(p) {
   let activo = pagado ? pasos.indexOf(p.estado_envio) : -1;
   const stepper = pasos.map((s, i) => `
     <div class="step ${pagado && i <= activo ? 'on' : ''}"><div class="lbl">${s}</div></div>`).join('');
-  const items = p.productos.map(x => `<div class="linea"><span>${x.nombre}</span><span>× ${x.cantidad}</span></div>`).join('');
+  const items = p.productos.map(x => `<div class="linea"><span>${x.nombre}${x.variante ? ' · ' + x.variante : ''}</span><span>× ${x.cantidad}</span></div>`).join('');
   out.innerHTML = `
     <div class="pedido-box">
       <div class="codigo">${p.codigo}</div>

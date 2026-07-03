@@ -44,9 +44,10 @@
   function newGame() {
     return {
       t: 0, dist: 0, metros: 0, coins: 0, speed: K.BASE_Z, scroll: 0, cam: 0,
-      player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, hopT: 0, shield: false, invuln: 0, run: 0, vidas: 2 },
+      player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, jumpPrev: 0, hopT: 0, shield: false, invuln: 0, run: 0, vidas: 2 },
       obstacles: [], coinsArr: [], powerups: [], particles: [], pops: [],
-      spawnT: 1.0, coinT: 0.8, powerT: 7, checkpointAt: CHECKPOINT_CADA,
+      spawnT: 1.0, coinT: 0.8, powerT: 7,
+      checkpointAt: CHECKPOINT_CADA, checkpointFrom: 0, checkpointNum: 0,
       fx: { mult: 1, sTimer: 0, sLabel: null, sGood: true, rainTimer: 0, scoreMult: 1, scoreMultT: 0 },
       banner: null, shake: 0, coinFlash: 0, finalCoins: 0, finalMetros: 0,
     };
@@ -180,11 +181,19 @@
     g.metros += eff * dt * K.METERS * fx.scoreMult;  // PUNTAJE = metros (×boost si activo)
 
     // CHECKPOINT: al alcanzar la marca, pausa y pregunta (bien espaciados).
-    if (g.metros >= g.checkpointAt) { g.checkpointAt = g.metros + CHECKPOINT_CADA + Math.random() * 600; mostrarTrivia(); return; }
+    // No hay "último" checkpoint: son INFINITOS. Cada ~2200 m (+azar) salta
+    // una trivia nueva y el contador sigue subiendo (1 → 2 → 3 → ...).
+    if (g.metros >= g.checkpointAt) {
+      g.checkpointNum += 1;
+      g.checkpointFrom = g.metros;
+      g.checkpointAt = g.metros + CHECKPOINT_CADA + Math.random() * 600;
+      mostrarTrivia(); return;
+    }
 
     // jugador
     p.px += (p.lane - 1 - p.px) * Math.min(1, dt * 17);
     g.cam = p.px;
+    p.jumpPrev = p.jumpOff;   // altura al inicio del frame (barrido vertical de recolección)
     if (p.jumping) { p.jumpOff += p.jumpVel * dt; p.jumpVel -= K.GRAV * dt; if (p.jumpOff <= 0) { p.jumpOff = 0; p.jumping = false; p.jumpVel = 0; } }
     if (p.hopT > 0) p.hopT -= dt;
     p.run += dt * 14;
@@ -222,27 +231,33 @@
     // ── recolección de monedas: carril visual + ventana + BARRIDO en z ──
     // (visual = posición continua del avatar; barrido = cruce del plano del
     //  jugador entre frame y frame, anti-tunneling a alta velocidad).
+    // ALTURA: la moneda se junta si su centro visual (28+h sobre el piso)
+    // queda a la altura del CUERPO del jugador o por debajo (sprite 107 px ×
+    // escala). Se barre el salto dentro del frame (jumpPrev→jumpOff) para no
+    // "tunelear" en vertical. Antes se exigía saltar para h>28 aunque el
+    // sprite tapara la moneda → "pasaba por encima y no la agarraba".
     const contLane = p.px + 1;
+    const bodyTop = Math.max(p.jumpPrev, p.jumpOff) + 107 * K.PLAYER_SCALE;
     for (const c of g.coinsArr) {
       if (c.got) continue;
       const laneOk = Math.abs(contLane - c.lane) < 0.6;
-      const jumpOk = p.jumpOff >= Math.min(c.h - 28, 42);
-      const inWindow = c.z <= K.COLLECT_Z && c.z > -0.5;
+      const heightOk = 28 + c.h <= bodyTop;
+      const inWindow = c.z <= K.COLLECT_Z && c.z > 0;
       const crossed = c.pz != null && c.z <= K.PLAYER_Z && c.pz > K.PLAYER_Z;   // cruzó el plano del jugador
-      if (laneOk && jumpOk && (inWindow || crossed)) {
+      if (laneOk && heightOk && (inWindow || crossed)) {
         c.got = true; g.coins++; g.coinFlash = 1;
         const cx = sx(c.lane - 1, c.z, g.cam), cy = groundY(c.z) - (28 + c.h) * pp(c.z);
         burst(cx, cy, GOLD, 6); pop(cx, cy - 6, '+1', GOLD); Audio.sfx.coin();
         if (DEBUG) console.log('coin OK', { lane: c.lane, z: +c.z.toFixed(2), crossed });
-      } else if (DEBUG && c.z <= K.COLLECT_Z && c.z > -0.5 && !c._dbg) {
+      } else if (DEBUG && c.z <= K.COLLECT_Z && c.z > 0 && !c._dbg) {
         c._dbg = true;
-        console.log('coin SKIP', { lane: c.lane, z: +c.z.toFixed(2), contLane: +contLane.toFixed(2), laneOk, jumpOk, jumpOff: +p.jumpOff.toFixed(0), h: c.h });
+        console.log('coin SKIP', { lane: c.lane, z: +c.z.toFixed(2), contLane: +contLane.toFixed(2), laneOk, heightOk, jumpOff: +p.jumpOff.toFixed(0), h: c.h });
       }
     }
     for (const u of g.powerups) {
       if (u.got) continue;
       const laneOk = Math.abs(contLane - u.lane) < 0.6;
-      const inWindow = u.z <= K.COLLECT_Z && u.z > -0.5;
+      const inWindow = u.z <= K.COLLECT_Z && u.z > 0;
       const crossed = u.pz != null && u.z <= K.PLAYER_Z && u.pz > K.PLAYER_Z;
       if (laneOk && (inWindow || crossed)) { u.got = true; burst(sx(u.lane - 1, u.z, g.cam), groundY(u.z) - 46 * pp(u.z), BONE, 12); applyPowerup(); }
     }
@@ -407,9 +422,19 @@
     pf('METROS', W - 16, 44, 9, RED, 'right');
     pf('' + g.coins, W - 16, 60, 14, GOLD, 'right');           // monedas (vidas/ruleta)
     pf('monedas', W - 16, 78, 8, MUTED, 'right');
-    // corazones (vidas)
-    for (let i = 0; i < p.vidas; i++) drawHeart(ctx, 24 + i * 26, 24, 10, RED);
-    let y = 44;
+    // corazones (vidas) — abajo a la izquierda, con margen del borde
+    const hy = H - 56;
+    for (let i = 0; i < p.vidas; i++) drawHeart(ctx, 30 + i * 30, hy, 11, RED);
+    // ── Barra de progreso al PRÓXIMO checkpoint ──
+    // (checkpoints infinitos: ver comentario en update(); el nº solo crece)
+    const cpSpan = Math.max(1, g.checkpointAt - g.checkpointFrom);
+    const cpProg = clamp((g.metros - g.checkpointFrom) / cpSpan, 0, 1);
+    const bx = 16, by = 34, bw = 250, bh = 10;
+    pf('CHECKPOINT ' + (g.checkpointNum + 1) + ' → ' + (g.checkpointNum + 2), bx, 16, 9, RED);
+    R(bx - 2, by - 2, bw + 4, bh + 4, '#2a1414');              // marco
+    R(bx, by, bw, bh, '#160b0b');                              // fondo
+    R(bx, by, Math.round(bw * cpProg), bh, RED);               // relleno
+    let y = 58;
     if (p.shield) { pf('◈ ESCUDO', 16, y, 11, BONE); y += 22; }
     if (g.fx.scoreMultT > 0) { pf('x1.5 METROS ' + Math.ceil(g.fx.scoreMultT) + 's', 16, y, 11, GREEN); y += 22; }
     if (g.fx.sTimer > 0) { pf((g.fx.sGood ? '▲ ' : '▼ ') + g.fx.sLabel, 16, y, 11, g.fx.sGood ? BONE : REDM); y += 22; }

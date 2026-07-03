@@ -15,6 +15,7 @@ export default async function handler(req, res) {
       case 'session':   return session(req, res);
       case 'pedidos':   return await pedidos(req, res);
       case 'productos': return await productos(req, res);
+      case 'variantes': return await variantes(req, res);
       case 'encargos':  return await encargos(req, res);
       case 'resenas':   return await resenas(req, res);
       default:          return fail(res, 404, 'Acción desconocida.');
@@ -120,6 +121,55 @@ async function productos(req, res) {
   if (req.method === 'DELETE') {
     if (!body.id) return fail(res, 400, 'Falta el id.');
     const { error } = await sb.from('productos').delete().eq('id', body.id);
+    if (error) throw error;
+    return json(res, 200, { ok: true });
+  }
+  fail(res, 405, 'Método no permitido.');
+}
+
+// ── variantes de producto (talle/color/... con stock propio) ──
+async function variantes(req, res) {
+  if (requireAdmin(req, res)) return;
+  const sb = supa();
+  if (req.method === 'GET') {
+    const url = new URL(req.url, 'http://x');
+    const productoId = url.searchParams.get('producto_id');
+    if (!productoId) return fail(res, 400, 'Falta producto_id.');
+    const { data, error } = await sb.from('producto_variantes').select('*')
+      .eq('producto_id', productoId)
+      .order('orden', { ascending: true }).order('created_at', { ascending: true });
+    if (error) throw error;
+    return json(res, 200, { ok: true, variantes: data || [] });
+  }
+  const body = await readBody(req);
+  if (req.method === 'POST') {
+    if (!body.producto_id || !body.valor) return fail(res, 400, 'Producto y valor son obligatorios.');
+    const fila = {
+      producto_id: body.producto_id,
+      atributo: String(body.atributo || 'talle').trim().toLowerCase(),
+      valor: String(body.valor).trim(),
+      stock_disponible: Math.max(0, parseInt(body.stock_disponible, 10) || 0),
+      orden: parseInt(body.orden, 10) || 0,
+      activo: body.activo !== false,
+    };
+    const { data, error } = await sb.from('producto_variantes').insert(fila).select('id').single();
+    if (error) throw error;
+    return json(res, 200, { ok: true, id: data.id });
+  }
+  if (req.method === 'PATCH') {
+    if (!body.id) return fail(res, 400, 'Falta el id.');
+    const permitidos = ['atributo', 'valor', 'stock_disponible', 'orden', 'activo'];
+    const update = {};
+    for (const k of permitidos) if (k in body) update[k] = body[k];
+    if ('stock_disponible' in update) update.stock_disponible = Math.max(0, parseInt(update.stock_disponible, 10) || 0);
+    if (!Object.keys(update).length) return fail(res, 400, 'Nada para actualizar.');
+    const { error } = await sb.from('producto_variantes').update(update).eq('id', body.id);
+    if (error) throw error;
+    return json(res, 200, { ok: true });
+  }
+  if (req.method === 'DELETE') {
+    if (!body.id) return fail(res, 400, 'Falta el id.');
+    const { error } = await sb.from('producto_variantes').delete().eq('id', body.id);
     if (error) throw error;
     return json(res, 200, { ok: true });
   }

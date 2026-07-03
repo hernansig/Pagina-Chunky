@@ -11,7 +11,7 @@
 
   let actx = null, master = null, muted = false, cursor = 0;
   let silentEl = null;                       // <audio> mudo (bypass switch iOS)
-  let musicGain = null, musicTimer = null, step = 0;
+  let musicEl = null;                        // <audio> de música de fondo (mp3 opcional)
 
   function ensure() {
     if (!actx) {
@@ -89,37 +89,29 @@
     } catch (e) {}
   }
 
-  // ── Música de fondo (chiptune en loop: bajo + arpegio) ──────────
-  const A2 = 110, C3 = 130.81, D3 = 146.83, E3 = 164.81, G3 = 196, A3 = 220,
-        C4 = 261.63, D4 = 293.66, E4 = 329.63, G4 = 392, A4 = 440;
-  const BASS = [A2, 0, A2, 0, G3, 0, G3, 0, C3, 0, C3, 0, D3, 0, D3, 0];
-  const LEAD = [A3, C4, E4, C4, G3, C4, E4, G4, C4, E4, G4, E4, D4, E4, G4, A4];
-
-  function mnote(freq, dur, type, vol) {
-    if (!freq || !musicGain) return;
-    const ac = actx, t = ac.currentTime + 0.03;
-    const osc = ac.createOscillator(), g = ac.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(freq, t);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(g).connect(musicGain);
-    osc.start(t); osc.stop(t + dur + 0.03);
-    osc.onended = () => { try { osc.disconnect(); g.disconnect(); } catch (e) {} };
-  }
-  function musicStep() {
-    mnote(BASS[step % BASS.length], 0.24, 'square', 0.05);
-    mnote(LEAD[step % LEAD.length], 0.16, 'triangle', 0.035);
-    step++;
-  }
+  // ── Música de fondo (archivo mp3 opcional, por ahora SIN música) ──
+  // Estructura lista: para activar la música basta con subir el archivo a
+  // /assets/music.mp3 (carpeta compartida del sitio, se sirve en esa URL).
+  // Si el archivo no existe, el catch silencioso deja el juego sin música
+  // (los SFX siguen andando). startMusic() se llama SIEMPRE dentro de un
+  // gesto del usuario (botón JUGAR) → cumple la política de autoplay móvil.
+  const MUSIC_URL = '/assets/music.mp3';
   function startMusic() {
-    if (musicTimer) return;
-    const ac = ensure();
-    if (!musicGain) { musicGain = ac.createGain(); musicGain.gain.value = muted ? 0 : 0.6; musicGain.connect(master); }
-    step = 0; musicStep();
-    musicTimer = setInterval(musicStep, 190);   // ~1 paso cada 190 ms
+    try {
+      if (!musicEl) {
+        musicEl = new Audio(MUSIC_URL);
+        musicEl.loop = true; musicEl.volume = 0.55;
+        musicEl.playsInline = true; musicEl.setAttribute('playsinline', '');
+        musicEl.addEventListener('error', () => { musicEl = null; });  // 404 → sin música
+      }
+      musicEl.muted = muted;
+      const pr = musicEl.play(); if (pr && pr.catch) pr.catch(() => {});
+    } catch (e) {}
   }
-  function stopMusic() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } }
+  function stopMusic() {
+    if (!musicEl) return;
+    try { musicEl.pause(); musicEl.currentTime = 0; } catch (e) {}
+  }
 
   // mantiene el cursor pegado al presente entre frames (no se adelanta)
   function tick() { if (actx) cursor = Math.max(cursor - 0.0001, actx.currentTime); }
@@ -132,7 +124,7 @@
     resume, unlock, tick, startMusic, stopMusic,
     toggleMute() {
       muted = !muted;
-      if (musicGain) musicGain.gain.value = muted ? 0 : 0.6;
+      if (musicEl) musicEl.muted = muted;
       return muted;
     },
     isMuted() { return muted; },

@@ -88,16 +88,20 @@
     ctx.fillStyle = floorGrad; ctx.fillRect(0, HORIZON, W, H - HORIZON);
 
     const RED = '#cc0000', DRED = '#8b0000';
+    // Las líneas de la calzada llegan hasta z=-0.5 (detrás del héroe): la
+    // calle continúa en primer plano y el jugador no queda "al borde del mundo".
+    const Z0 = -0.5;
     const verts = [-2.4, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2.4];
     for (const off of verts) {
       const bright = off === -1.5 || off === 1.5 || off === -0.5 || off === 0.5;
-      const x0 = sx(off, 0.02, cam), y0 = groundY(0.02);
+      const x0 = sx(off, Z0, cam), y0 = groundY(Z0);
       glowLine(ctx, x0, y0, W / 2, HORIZON, bright ? RED : DRED, bright ? 2.4 : 1, bright ? 0.8 : 0.28);
     }
     const gap = 0.6, phase = scroll % gap, eL = z => sx(-2.4, z, cam), eR = z => sx(2.4, z, cam);
-    for (let z = gap - phase; z < 17; z += gap) {
+    for (let z = gap - phase - gap * 2; z < 17; z += gap) {
+      if (z < Z0) continue;
       const y = groundY(z), p = pp(z);
-      glowLine(ctx, eL(z), y, eR(z), y, DRED, Math.max(1, 2.2 * p), Math.max(0.12, 0.6 * p));
+      glowLine(ctx, eL(z), y, eR(z), y, DRED, Math.max(1, 2.2 * p), Math.min(0.85, Math.max(0.12, 0.6 * p)));
     }
     ctx.fillStyle = 'rgba(204,0,0,0.5)'; ctx.fillRect(0, HORIZON - 1, W, 2);
 

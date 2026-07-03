@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       ok: true,
       pedido: {
         codigo: data.codigo_publico,
-        productos: (data.productos || []).map((p) => ({ nombre: p.nombre, cantidad: p.cantidad || 1 })),
+        productos: (data.productos || []).map((p) => ({ nombre: p.nombre, variante: p.variante || null, cantidad: p.cantidad || 1 })),
         monto_total: data.monto_total,
         estado_pago: data.estado_pago,
         estado_envio: data.estado_envio,

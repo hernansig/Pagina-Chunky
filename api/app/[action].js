@@ -250,11 +250,15 @@ async function avisarPremio(u, tipo) {
   });
 }
 async function avisarReclamo(u, tipo) {
+  const fecha = new Intl.DateTimeFormat('es-UY', {
+    dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Montevideo',
+  }).format(new Date());
   await avisarDueno({
     subject: `RECLAMO de premio: ${tipo}`,
     html: plantilla({
       titulo: 'Reclamo de premio',
-      cuerpoHtml: `<b>${u.nombre || u.alias || 'Un usuario'}</b> (${u.email}) reclamó <b>${NOMBRE_ITEM[tipo] || tipo}</b>.<br><br>
+      cuerpoHtml: `<b>${u.nombre || u.alias || 'Un usuario'}</b> (${u.email}) reclamó <b>${NOMBRE_ITEM[tipo] || tipo}</b>.<br>
+        <b>Fecha del canje:</b> ${fecha} (hora Uruguay)<br><br>
         Coordiná la entrega por Instagram (@chunkysnkrs.uy).`,
     }),
   });

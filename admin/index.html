@@ -167,10 +167,12 @@ async function vProductos() {
       <td><input class="e-activo" type="checkbox" ${p.activo ? 'checked' : ''}></td>
       <td class="right">
         <button class="btn mini guardar"><span>Guardar</span></button>
+        <button class="btn mini ghost variantes"><span>Variantes</span></button>
         <button class="btn mini ghost duplicar"><span>Duplicar</span></button>
         <button class="btn mini ghost borrar"><span>X</span></button>
       </td>
-    </tr>`).join('')}</tbody></table>`;
+    </tr>
+    <tr class="var-row" data-for="${p.id}" style="display:none"><td colspan="6"></td></tr>`).join('')}</tbody></table>`;
 
   document.getElementById('pf-btn').addEventListener('click', async () => {
     const nombre = document.getElementById('pf-nombre').value.trim();
@@ -217,6 +219,79 @@ async function vProductos() {
       if (!confirm('¿Borrar producto?')) return;
       try { await api('/api/admin/productos', { method: 'DELETE', body: { id } }); tr.remove(); } catch (e) { alert(e.message); }
     });
+    tr.querySelector('.variantes').addEventListener('click', () => {
+      const row = vista().querySelector(`tr.var-row[data-for="${id}"]`);
+      const abierto = row.style.display !== 'none';
+      row.style.display = abierto ? 'none' : '';
+      if (!abierto) cargarVariantes(row.querySelector('td'), id);
+    });
+  });
+}
+
+// ── Variantes de un producto (talle/color/... con stock propio) ──
+async function cargarVariantes(td, productoId) {
+  td.innerHTML = '<div class="empty" style="padding:12px 0">cargando variantes...</div>';
+  let variantes = [];
+  try { ({ variantes } = await api('/api/admin/variantes?producto_id=' + productoId)); }
+  catch (e) { td.innerHTML = `<div class="empty" style="padding:12px 0">${esc(e.message)} — ¿corriste db/add-variantes.sql en Supabase?</div>`; return; }
+
+  td.innerHTML = `
+    <div style="padding:10px 6px 14px;border-left:2px solid var(--bordo)">
+      <div style="font-family:'Bebas Neue';letter-spacing:2px;color:var(--muted);margin-bottom:8px">
+        VARIANTES — cada una tiene su propio stock (talle, color u otro atributo)
+      </div>
+      <table style="max-width:640px"><thead><tr><th>Atributo</th><th>Valor</th><th>Stock</th><th>Activa</th><th></th></tr></thead>
+      <tbody>
+        ${variantes.map(v => `<tr data-vid="${v.id}">
+          <td><input class="v-atr" value="${esc(v.atributo)}" style="width:90px"></td>
+          <td><input class="v-val" value="${esc(v.valor)}" style="width:90px"></td>
+          <td><input class="v-stock" type="number" value="${v.stock_disponible}" style="width:60px"></td>
+          <td><input class="v-activo" type="checkbox" ${v.activo ? 'checked' : ''}></td>
+          <td class="right">
+            <button class="btn mini v-guardar"><span>Guardar</span></button>
+            <button class="btn mini ghost v-borrar"><span>X</span></button>
+          </td>
+        </tr>`).join('')}
+        <tr>
+          <td><input class="v-atr-new" placeholder="talle / color" value="talle" style="width:90px"></td>
+          <td><input class="v-val-new" placeholder="42, Rojo..." style="width:90px"></td>
+          <td><input class="v-stock-new" type="number" value="1" style="width:60px"></td>
+          <td></td>
+          <td class="right"><button class="btn mini v-agregar"><span>+ Agregar</span></button></td>
+        </tr>
+      </tbody></table>
+    </div>`;
+
+  td.querySelectorAll('tr[data-vid]').forEach(fila => {
+    const vid = fila.dataset.vid;
+    fila.querySelector('.v-guardar').addEventListener('click', async () => {
+      try {
+        await api('/api/admin/variantes', { method: 'PATCH', body: {
+          id: vid, atributo: fila.querySelector('.v-atr').value.trim(),
+          valor: fila.querySelector('.v-val').value.trim(),
+          stock_disponible: parseInt(fila.querySelector('.v-stock').value, 10) || 0,
+          activo: fila.querySelector('.v-activo').checked,
+        }});
+        CHK.toast('Variante guardada');
+      } catch (e) { alert(e.message); }
+    });
+    fila.querySelector('.v-borrar').addEventListener('click', async () => {
+      if (!confirm('¿Borrar variante?')) return;
+      try { await api('/api/admin/variantes', { method: 'DELETE', body: { id: vid } }); fila.remove(); } catch (e) { alert(e.message); }
+    });
+  });
+  td.querySelector('.v-agregar').addEventListener('click', async () => {
+    const valor = td.querySelector('.v-val-new').value.trim();
+    if (!valor) return alert('Poné el valor de la variante (ej: 42, Rojo, M).');
+    try {
+      await api('/api/admin/variantes', { method: 'POST', body: {
+        producto_id: productoId,
+        atributo: td.querySelector('.v-atr-new').value.trim() || 'talle',
+        valor,
+        stock_disponible: parseInt(td.querySelector('.v-stock-new').value, 10) || 0,
+      }});
+      cargarVariantes(td, productoId);
+    } catch (e) { alert(e.message); }
   });
 }
 
