@@ -3,6 +3,8 @@ import { supa } from '../../lib/supabase.js';
 import { json, fail, readBody } from '../../lib/http.js';
 import { usuarioDeReq, getAuthUser } from '../../lib/usuario.js';
 import { avisarDueno, plantilla } from '../../lib/mail.js';
+import { tokenAleatorio } from '../../lib/util.js';
+import { permitido } from '../../lib/ratelimit.js';
 
 // Función única para /api/app/* (Vercel la cuenta como 1 sola función).
 export default async function handler(req, res) {
@@ -14,6 +16,7 @@ export default async function handler(req, res) {
       case 'me':              return await me(req, res);
       case 'perfil':          return await perfil(req, res);
       case 'ranking':         return await ranking(req, res);
+      case 'iniciar-partida': return await iniciarPartida(req, res);
       case 'guardar-puntaje': return await guardarPuntaje(req, res);
       case 'ruleta-girar':    return await ruletaGirar(req, res);
       case 'comprar-vida':    return await comprarVida(req, res);
@@ -31,6 +34,15 @@ const RULETA_COSTO = Number(process.env.RULETA_COSTO) || 1700;
 const VIDA_COSTO = 200;
 const LIMITE_GIROS = 20;     // giros pagos por semana
 const MAX_ITEMS = 5;         // items disponibles simultáneos
+
+// Anti-cheat del minijuego: cotas físicas de lo que se puede lograr por
+// segundo REAL de partida (velocidad tope × metros/z × boost, con margen).
+// La cota nunca rechaza a un jugador legítimo (el reloj de pared siempre es
+// ≥ el tiempo de juego), pero vuelve inservible postear puntajes inventados.
+const MAX_METROS_POR_SEG = 75;    // físico ~68.4 m/s; margen incluido
+const MAX_MONEDAS_POR_SEG = 20;   // pico de recolección con margen
+const MARGEN_METROS = 500;        // colchón fijo (latencia/redondeo)
+const MARGEN_MONEDAS = 60;
 
 // ── Config pública para el frontend ─────────────────────────────
 function config(req, res) {
@@ -90,17 +102,62 @@ async function ranking(req, res) {
   json(res, 200, { ok: true, top: top.map(({ usuario_id, ...r }) => r), tu });
 }
 
+// ── Iniciar partida: emite un token de sesión server-side (anti-cheat) ──
+async function iniciarPartida(req, res) {
+  if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
+  const u = await usuarioDeReq(req);
+  if (!u) return fail(res, 401, 'No autenticado.');
+  // Límite anti-spam de sesiones (por usuario): no debería crear cientos por hora.
+  if (!(await permitido(`partida:${u.id}`, 3600, 200))) {
+    return fail(res, 429, 'Demasiadas partidas seguidas. Probá en un rato.');
+  }
+  const token = tokenAleatorio(24);
+  const { error } = await supa().from('juego_sesiones').insert({ usuario_id: u.id, token });
+  if (error) {
+    console.error('[iniciar-partida]', error.message);   // tabla ausente → ¿corriste add-seguridad.sql?
+    return fail(res, 500, 'No se pudo iniciar la partida.');
+  }
+  json(res, 200, { ok: true, token });
+}
+
 // ── Guardar partida: registra metros (ranking) + banca monedas ──
+// Requiere el token de sesión emitido por iniciar-partida. Se valida que:
+//  · la sesión sea del usuario y no esté ya cerrada (single-use, anti-replay);
+//  · los metros/monedas sean físicamente posibles para el tiempo transcurrido.
 async function guardarPuntaje(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
   const u = await usuarioDeReq(req);
   if (!u) return fail(res, 401, 'No autenticado.');
 
   const body = await readBody(req);
+  const token = (body.token || '').trim();
   const metros = clampInt(body.metros, 0, 1000000);
   const monedas = clampInt(body.monedas != null ? body.monedas : body.puntaje, 0, 100000);
+  if (!token) return fail(res, 400, 'Falta el token de la partida. Actualizá la página.');
 
   const sb = supa();
+
+  // Buscar la sesión de esta partida (debe ser del usuario y estar abierta).
+  const { data: ses } = await sb.from('juego_sesiones')
+    .select('id,iniciada_en,cerrada').eq('token', token).eq('usuario_id', u.id).maybeSingle();
+  if (!ses) return fail(res, 403, 'Sesión de partida inválida.');
+
+  // Cerrar la sesión de forma ATÓMICA (una sola escritura gana el race).
+  // Si otra request ya la cerró → esta partida no se guarda dos veces.
+  const { data: cerrada } = await sb.from('juego_sesiones')
+    .update({ cerrada: true, metros, monedas })
+    .eq('id', ses.id).eq('cerrada', false).select('id');
+  if (!cerrada || !cerrada.length) return fail(res, 409, 'Esa partida ya fue guardada.');
+
+  // Plausibilidad: ¿es posible ese puntaje en el tiempo real transcurrido?
+  const segs = Math.max(1, (Date.now() - new Date(ses.iniciada_en).getTime()) / 1000);
+  const maxMetros = segs * MAX_METROS_POR_SEG + MARGEN_METROS;
+  const maxMonedas = segs * MAX_MONEDAS_POR_SEG + MARGEN_MONEDAS;
+  if (metros > maxMetros || monedas > maxMonedas) {
+    console.warn('[guardar-puntaje] rechazado por implausible', { usuario: u.id, segs: Math.round(segs), metros, monedas });
+    return fail(res, 422, 'Puntaje inválido.');   // sesión ya cerrada: no se puede reintentar
+  }
+
   const { error: insErr } = await sb.from('puntajes_mensuales')
     .insert({ usuario_id: u.id, alias: u.alias, metros, puntaje: monedas });
   if (insErr) {
@@ -193,43 +250,41 @@ async function ruletaGirar(req, res) {
     return fail(res, 409, `Ya tenés el máximo de premios guardados (${MAX_ITEMS}). Canjeá alguno antes de seguir girando.`);
   }
 
-  // Estado fresco.
-  const { data: cur } = await sb.from('usuarios')
-    .select('puntos_disponibles,giros_gratis,giros_semana,giros_semana_ref').eq('id', u.id).maybeSingle();
-  let pts = cur?.puntos_disponibles || 0;
-  let giros = cur?.giros_gratis || 0;
   const ref = semanaRef();
-  let semCount = cur?.giros_semana_ref === ref ? (cur?.giros_semana || 0) : 0;
 
-  // Cobro: giro gratis (no cuenta contra el límite) o pago (cuenta + descuenta).
-  if (giros > 0) {
-    giros -= 1;
-  } else {
-    if (semCount >= LIMITE_GIROS) return fail(res, 409, `Llegaste a los ${LIMITE_GIROS} giros de esta semana. Vuelven a empezar el lunes.`);
-    if (pts < RULETA_COSTO) return fail(res, 409, `Necesitás ${RULETA_COSTO} monedas para girar.`);
-    pts -= RULETA_COSTO;
-    semCount += 1;
+  // Cobro ATÓMICO del giro (giro gratis o pago) con lock de la fila del
+  // usuario. Elimina el race de leer-saldo → modificar → escribir: disparar
+  // N giros en paralelo ya no permite saltarse el límite ni el saldo.
+  const { data: cobroRows, error: cobroErr } = await sb.rpc('cobrar_giro_ruleta', {
+    p_usuario_id: u.id, p_costo: RULETA_COSTO, p_limite: LIMITE_GIROS, p_ref: ref,
+  });
+  if (cobroErr) { console.error('[ruleta] cobro', cobroErr.message); return fail(res, 500, 'No se pudo girar.'); }
+  const cobro = Array.isArray(cobroRows) ? cobroRows[0] : cobroRows;
+  if (!cobro || !cobro.ok) {
+    if (cobro && cobro.motivo === 'limite') return fail(res, 409, `Llegaste a los ${LIMITE_GIROS} giros de esta semana. Vuelven a empezar el lunes.`);
+    if (cobro && cobro.motivo === 'saldo') return fail(res, 409, `Necesitás ${RULETA_COSTO} monedas para girar.`);
+    return fail(res, 409, 'No se pudo girar.');
   }
+  let pts = cobro.puntos;
+  let giros = cobro.giros_gratis;
+  const semCount = cobro.giros_semana;
 
   // Sorteo con crypto (nunca Math.random) + sección de la rueda que coincida.
   const resultado = sortearPonderado(PESOS);
   const indices = WHEEL.map((t, i) => (t === resultado ? i : -1)).filter((i) => i >= 0);
   const seccion = indices[crypto.randomInt(indices.length)];
 
-  // Efectos.
+  // Recompensas (el cobro ya quedó firme; acá solo se acredita lo ganado).
   let premio = null;
   if (resultado === 'otro_giro') {
-    giros += 1;
+    const { data: g } = await sb.rpc('sumar_giros_gratis', { p_usuario_id: u.id, p_delta: 1 });
+    giros = g != null ? g : giros + 1;
     premio = 'otro_giro';
   } else if (ITEM_TIPOS.includes(resultado)) {
     await sb.from('items_usuario').insert({ usuario_id: u.id, tipo_item: resultado });
     premio = resultado;
     avisarPremio(u, resultado).catch((e) => console.error('[ruleta mail]', e.message));
   }
-
-  await sb.from('usuarios').update({
-    puntos_disponibles: pts, giros_gratis: giros, giros_semana: semCount, giros_semana_ref: ref,
-  }).eq('id', u.id);
 
   json(res, 200, {
     ok: true, resultado, seccion, etiqueta: ETIQUETAS[resultado], premio,

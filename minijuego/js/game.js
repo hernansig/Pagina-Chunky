@@ -531,6 +531,8 @@
     Audio.resume();
     if (Audio.startMusic) Audio.startMusic();
     game = newGame(); state = 'playing';
+    if (Board.startSession) Board.startSession();   // token anti-cheat de la partida
+    if (dios) game.trucada = true;                  // si el modo dios sigue activo, la partida no cuenta
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('overScreen').classList.add('hidden');
     const rv = document.getElementById('revivir'); if (rv) rv.classList.add('hidden');

@@ -1,11 +1,18 @@
 import { supa } from '../lib/supabase.js';
 import { json, fail, methodNotAllowed, readBody } from '../lib/http.js';
 import { avisarDueno, plantilla } from '../lib/mail.js';
+import { permitido, ipDe } from '../lib/ratelimit.js';
+import { escHtml } from '../lib/util.js';
 
 // POST /api/encargo — body: { nombre, contacto, producto_deseado, talle?, detalles? }
 export default async function handler(req, res) {
   if (methodNotAllowed(req, res, 'POST')) return;
   try {
+    // Anti-flood: máx 5 encargos por IP cada 10 min (cada uno manda un mail).
+    if (!(await permitido(`encargo:${ipDe(req)}`, 600, 5))) {
+      return fail(res, 429, 'Muchos envíos seguidos. Esperá unos minutos.');
+    }
+
     const body = await readBody(req);
     const nombre = (body.nombre || '').trim();
     const contacto = (body.contacto || '').trim();
@@ -33,11 +40,11 @@ export default async function handler(req, res) {
       html: plantilla({
         titulo: 'Nuevo encargo',
         cuerpoHtml: `
-          <b>Cliente:</b> ${nombre}<br>
-          <b>Contacto:</b> ${contacto}<br>
-          <b>Producto:</b> ${producto}<br>
-          <b>Talle:</b> ${talle || '—'}<br>
-          <b>Detalles:</b> ${detalles || '—'}`,
+          <b>Cliente:</b> ${escHtml(nombre)}<br>
+          <b>Contacto:</b> ${escHtml(contacto)}<br>
+          <b>Producto:</b> ${escHtml(producto)}<br>
+          <b>Talle:</b> ${escHtml(talle) || '—'}<br>
+          <b>Detalles:</b> ${escHtml(detalles) || '—'}`,
       }),
     });
 

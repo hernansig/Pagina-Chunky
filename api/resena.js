@@ -1,12 +1,18 @@
 import { supa } from '../lib/supabase.js';
 import { json, fail, methodNotAllowed, readBody } from '../lib/http.js';
 import { verificarFirmaCorta } from '../lib/util.js';
+import { permitido, ipDe } from '../lib/ratelimit.js';
 
 // POST /api/resena — recibe la reseña desde el link del mail (sin login).
 // body: { codigo, token, rating, texto, nombre? }
 export default async function handler(req, res) {
   if (methodNotAllowed(req, res, 'POST')) return;
   try {
+    // Anti-flood: máx 20 envíos por IP cada 10 min (además de la firma del link).
+    if (!(await permitido(`resena:${ipDe(req)}`, 600, 20))) {
+      return fail(res, 429, 'Demasiados envíos. Esperá unos minutos.');
+    }
+
     const body = await readBody(req);
     const codigo = (body.codigo || '').trim().toUpperCase();
     const token = (body.token || '').trim();

@@ -147,7 +147,7 @@
     banner.setAttribute('role', 'dialog');
     banner.setAttribute('aria-label', 'Aviso de cookies');
     banner.innerHTML = `
-      <p class="cookie-text">Este sitio usa cookies para funcionar correctamente y procesar pagos a través de MercadoPago. Al continuar navegando, aceptás su uso.</p>
+      <p class="cookie-text">Este sitio usa almacenamiento local de tu navegador para recordar tu carrito, y una cookie de sesión solo en el panel de administración. Los pagos se procesan en MercadoPago, que puede usar sus propias cookies. No usamos cookies de rastreo publicitario.</p>
       <div class="cookie-actions">
         <button class="cookie-btn" type="button">Aceptar</button>
         <a class="cookie-link" href="/privacidad">Ver política de privacidad</a>

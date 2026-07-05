@@ -2,6 +2,7 @@ import { supa } from '../lib/supabase.js';
 import { json, fail, methodNotAllowed, readBody, isEmail } from '../lib/http.js';
 import { crearPreferencia } from '../lib/mercadopago.js';
 import { generarCodigoPedido } from '../lib/util.js';
+import { permitido, ipDe } from '../lib/ratelimit.js';
 
 // POST /api/crear-pago
 // body carrito:  { items: [{producto_id, variante_id?, cantidad}], nombre?, email, direccion }
@@ -11,6 +12,11 @@ import { generarCodigoPedido } from '../lib/util.js';
 export default async function handler(req, res) {
   if (methodNotAllowed(req, res, 'POST')) return;
   try {
+    // Anti-flood: máx 15 intentos de pago por IP cada 10 min.
+    if (!(await permitido(`pago:${ipDe(req)}`, 600, 15))) {
+      return fail(res, 429, 'Demasiados intentos. Esperá unos minutos.');
+    }
+
     const body = await readBody(req);
     const email = (body.email || '').trim();
     const nombre = (body.nombre || '').trim() || null;

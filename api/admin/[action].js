@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { supa } from '../../lib/supabase.js';
 import { json, fail, readBody } from '../../lib/http.js';
 import { requireAdmin, firmarSesion, cookieSesion } from '../../lib/auth.js';
+import { permitido, ipDe } from '../../lib/ratelimit.js';
 
 // Función única para todo /api/admin/* (login, logout, session, pedidos,
 // productos, encargos, resenas). Vercel cuenta esto como 1 sola función.
@@ -35,6 +36,10 @@ function igual(a, b) {
 // ── login / logout / session ──────────────────────────────────
 async function login(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
+  // Anti-fuerza-bruta: máx 8 intentos por IP cada 10 min.
+  if (!(await permitido(`adminlogin:${ipDe(req)}`, 600, 8))) {
+    return fail(res, 429, 'Demasiados intentos. Esperá unos minutos.');
+  }
   const { user, password } = await readBody(req);
   const okUser = igual(user || '', process.env.ADMIN_USER || '');
   const okPass = igual(password || '', process.env.ADMIN_PASSWORD || '');
