@@ -2,7 +2,7 @@ import { supa } from '../lib/supabase.js';
 import { json, fail, methodNotAllowed, readBody, isEmail } from '../lib/http.js';
 import { enviarMail, avisarDueno, plantilla } from '../lib/mail.js';
 import { permitido, ipDe } from '../lib/ratelimit.js';
-import { escHtml } from '../lib/util.js';
+import { escHtml, esUUID } from '../lib/util.js';
 
 const MAX_RESERVAS_EMAIL = 3;   // reservas activas simultáneas por email
 
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     const body = await readBody(req);
     const productoId = body.producto_id;
     const email = (body.email || '').trim().toLowerCase();
-    if (!productoId) return fail(res, 400, 'Falta el producto.');
+    if (!esUUID(productoId)) return fail(res, 400, 'Producto inválido.');
     if (!isEmail(email)) return fail(res, 400, 'Email inválido.');
 
     const sb = supa();

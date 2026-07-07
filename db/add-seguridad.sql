@@ -123,3 +123,56 @@ $$;
 -- ───────────────────────────────────────────────────────────────────
 create unique index if not exists uniq_reserva_activa_producto
   on reservas (producto_id) where estado = 'activa';
+
+-- ───────────────────────────────────────────────────────────────────
+--  5) RESERVA DE STOCK AL CREAR LA ORDEN (anti sobreventa)
+--  Al ir a pagar se descuenta el stock de forma atómica y se marca el
+--  pedido con stock_reservado + vencimiento. El webhook, si el pedido ya
+--  tenía el stock reservado, NO vuelve a descontar (solo confirma). Si el
+--  pago se rechaza o el checkout se abandona (cron), el stock se devuelve.
+-- ───────────────────────────────────────────────────────────────────
+alter table pedidos add column if not exists stock_reservado boolean not null default false;
+alter table pedidos add column if not exists reserva_vence_en timestamptz;
+create index if not exists idx_pedidos_reserva
+  on pedidos (stock_reservado, reserva_vence_en) where estado_pago = 'pendiente';
+
+-- Descuento atómico y condicional: resta sólo si hay stock suficiente.
+-- Devuelve true si reservó, false si no había stock (sin tocar la fila).
+create or replace function reservar_stock(p_producto_id uuid, p_cantidad integer)
+returns boolean language plpgsql as $$
+declare afectadas integer;
+begin
+  update productos set stock_disponible = stock_disponible - p_cantidad
+    where id = p_producto_id and stock_disponible >= p_cantidad;
+  get diagnostics afectadas = row_count;
+  return afectadas > 0;
+end;
+$$;
+
+create or replace function reservar_stock_variante(p_variante_id uuid, p_cantidad integer)
+returns boolean language plpgsql as $$
+declare afectadas integer;
+begin
+  update producto_variantes set stock_disponible = stock_disponible - p_cantidad
+    where id = p_variante_id and stock_disponible >= p_cantidad;
+  get diagnostics afectadas = row_count;
+  return afectadas > 0;
+end;
+$$;
+
+-- Devolución de stock reservado (pago rechazado o checkout vencido).
+create or replace function devolver_stock(p_producto_id uuid, p_cantidad integer)
+returns void language plpgsql as $$
+begin
+  update productos set stock_disponible = stock_disponible + p_cantidad
+    where id = p_producto_id;
+end;
+$$;
+
+create or replace function devolver_stock_variante(p_variante_id uuid, p_cantidad integer)
+returns void language plpgsql as $$
+begin
+  update producto_variantes set stock_disponible = stock_disponible + p_cantidad
+    where id = p_variante_id;
+end;
+$$;

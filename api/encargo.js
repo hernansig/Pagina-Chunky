@@ -2,7 +2,7 @@ import { supa } from '../lib/supabase.js';
 import { json, fail, methodNotAllowed, readBody } from '../lib/http.js';
 import { avisarDueno, plantilla } from '../lib/mail.js';
 import { permitido, ipDe } from '../lib/ratelimit.js';
-import { escHtml } from '../lib/util.js';
+import { escHtml, limpiar } from '../lib/util.js';
 
 // POST /api/encargo — body: { nombre, contacto, producto_deseado, talle?, detalles? }
 export default async function handler(req, res) {
@@ -14,11 +14,11 @@ export default async function handler(req, res) {
     }
 
     const body = await readBody(req);
-    const nombre = (body.nombre || '').trim();
-    const contacto = (body.contacto || '').trim();
-    const producto = (body.producto_deseado || '').trim();
-    const talle = (body.talle || '').trim() || null;
-    const detalles = (body.detalles || '').trim() || null;
+    const nombre = limpiar(body.nombre, 80);
+    const contacto = limpiar(body.contacto, 120);
+    const producto = limpiar(body.producto_deseado, 120);
+    const talle = limpiar(body.talle, 40) || null;
+    const detalles = limpiar(body.detalles, 600) || null;
 
     if (nombre.length < 2) return fail(res, 400, 'Nombre inválido.');
     if (contacto.length < 5) return fail(res, 400, 'Contacto inválido.');

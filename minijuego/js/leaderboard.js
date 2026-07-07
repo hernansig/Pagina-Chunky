@@ -16,11 +16,16 @@
     try {
       const t = await token();
       if (!t) return null;
+      // token de captcha (Turnstile), si la página lo tiene configurado
+      const captcha = (window.CR && typeof CR.captchaToken === 'function') ? CR.captchaToken() : null;
       const res = await fetch('/api/app/iniciar-partida', {
-        method: 'POST', headers: { Authorization: 'Bearer ' + t },
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captcha }),
       });
       const j = await res.json();
       if (j && j.ok) sessionToken = j.token;
+      if (window.CR && typeof CR.captchaReset === 'function') CR.captchaReset();   // preparar el siguiente
       return sessionToken;
     } catch { return null; }
   }

@@ -299,9 +299,16 @@ cargarResenas();
 
 // Aviso al volver de un pago no completado (back_urls de MercadoPago).
 (function () {
-  const pago = new URLSearchParams(location.search).get('pago');
-  if (pago === 'cancelado') CHK.toast('No se completó el pago. Podés intentar de nuevo cuando quieras.');
-  else if (pago === 'pendiente') CHK.toast('Tu pago quedó pendiente. Te avisamos por mail cuando se acredite.');
+  const params = new URLSearchParams(location.search);
+  const pago = params.get('pago');
+  const codigo = params.get('codigo');
+  if (pago === 'cancelado') {
+    CHK.toast('No se completó el pago. Podés intentar de nuevo cuando quieras.');
+    // Volvió sin pagar → liberar la reserva de stock enseguida (best-effort).
+    if (codigo) CHK.api('/api/pedido', { method: 'POST', body: { codigo } }).catch(() => {});
+  } else if (pago === 'pendiente') {
+    CHK.toast('Tu pago quedó pendiente. Te avisamos por mail cuando se acredite.');
+  }
   if (pago) history.replaceState(null, '', location.pathname);
 })();
 </script>

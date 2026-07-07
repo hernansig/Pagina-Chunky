@@ -4,7 +4,8 @@ import { json, fail, readBody } from '../../lib/http.js';
 import { usuarioDeReq, getAuthUser } from '../../lib/usuario.js';
 import { avisarDueno, plantilla } from '../../lib/mail.js';
 import { tokenAleatorio } from '../../lib/util.js';
-import { permitido } from '../../lib/ratelimit.js';
+import { permitido, ipDe } from '../../lib/ratelimit.js';
+import { verificarTurnstile } from '../../lib/captcha.js';
 
 // Función única para /api/app/* (Vercel la cuenta como 1 sola función).
 export default async function handler(req, res) {
@@ -46,7 +47,12 @@ const MARGEN_MONEDAS = 60;
 
 // ── Config pública para el frontend ─────────────────────────────
 function config(req, res) {
-  json(res, 200, { ok: true, supabaseUrl: process.env.SUPABASE_URL || '', supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '' });
+  json(res, 200, {
+    ok: true,
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+    turnstileSiteKey: process.env.TURNSTILE_SITE_KEY || '',   // '' = captcha apagado
+  });
 }
 
 // ── Usuario actual (saldo para el header) ───────────────────────
@@ -69,10 +75,19 @@ async function perfil(req, res) {
     .select('id,tipo_item,estado,obtenido_en,canjeado_en')
     .eq('usuario_id', u.id).order('obtenido_en', { ascending: false }).limit(50);
 
-  const { data: pedidos } = await sb.from('pedidos')
-    .select('codigo_publico,estado_pago,estado_envio,monto_total,productos')
-    .or(`usuario_id.eq.${u.id},cliente_contacto.eq.${u.email}`)
-    .order('id', { ascending: false }).limit(20);
+  // Pedidos del usuario: por usuario_id o por email. Se hacen dos consultas
+  // con filtros parametrizados (.eq) y se fusionan, en vez de interpolar el
+  // email dentro de un .or() por string (evita alterar la consulta).
+  const cols = 'codigo_publico,estado_pago,estado_envio,monto_total,productos';
+  const [rUser, rMail] = await Promise.all([
+    sb.from('pedidos').select(cols).eq('usuario_id', u.id).order('id', { ascending: false }).limit(20),
+    u.email
+      ? sb.from('pedidos').select(cols).eq('cliente_contacto', u.email).order('id', { ascending: false }).limit(20)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const dedup = new Map();
+  for (const p of [...(rUser.data || []), ...(rMail.data || [])]) dedup.set(p.codigo_publico, p);
+  const pedidos = [...dedup.values()].slice(0, 20);
 
   json(res, 200, {
     ok: true, usuario: publico(u),
@@ -110,6 +125,11 @@ async function iniciarPartida(req, res) {
   // Límite anti-spam de sesiones (por usuario): no debería crear cientos por hora.
   if (!(await permitido(`partida:${u.id}`, 3600, 200))) {
     return fail(res, 429, 'Demasiadas partidas seguidas. Probá en un rato.');
+  }
+  // Captcha opcional (Turnstile). Si no está configurado, no exige nada.
+  const body = await readBody(req).catch(() => ({}));
+  if (!(await verificarTurnstile(body && body.captcha, ipDe(req)))) {
+    return fail(res, 403, 'Verificación anti-bot fallida. Recargá la página.');
   }
   const token = tokenAleatorio(24);
   const { error } = await supa().from('juego_sesiones').insert({ usuario_id: u.id, token });

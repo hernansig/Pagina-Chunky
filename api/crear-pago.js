@@ -1,14 +1,18 @@
 import { supa } from '../lib/supabase.js';
 import { json, fail, methodNotAllowed, readBody, isEmail } from '../lib/http.js';
 import { crearPreferencia } from '../lib/mercadopago.js';
-import { generarCodigoPedido } from '../lib/util.js';
+import { generarCodigoPedido, limpiar, esUUID } from '../lib/util.js';
 import { permitido, ipDe } from '../lib/ratelimit.js';
 
 // POST /api/crear-pago
 // body carrito:  { items: [{producto_id, variante_id?, cantidad}], nombre?, email, direccion }
 // body clásico:  { producto_id, cantidad?, nombre?, email, direccion }   (compat)
-// Crea un pedido en estado "pendiente" y devuelve el init_point de MercadoPago.
-// El stock NO se descuenta acá: la única fuente de verdad es el webhook.
+// Crea un pedido "pendiente", RESERVA el stock de forma atómica (para que dos
+// compras del mismo producto no se aprueben las dos) y devuelve el init_point
+// de MercadoPago. El pago se sigue confirmando SOLO por webhook; si el checkout
+// se abandona, el cron libera el stock reservado (reserva_vence_en).
+const RESERVA_MIN = 30;   // minutos que se retiene el stock esperando el pago
+
 export default async function handler(req, res) {
   if (methodNotAllowed(req, res, 'POST')) return;
   try {
@@ -19,7 +23,7 @@ export default async function handler(req, res) {
 
     const body = await readBody(req);
     const email = (body.email || '').trim();
-    const nombre = (body.nombre || '').trim() || null;
+    const nombre = limpiar(body.nombre, 80) || null;
 
     // Normalizar: carrito (items[]) o producto único (compat).
     let lineas = Array.isArray(body.items) && body.items.length
@@ -31,18 +35,20 @@ export default async function handler(req, res) {
       cantidad: Math.min(10, Math.max(1, parseInt(l.cantidad, 10) || 1)),
     }));
 
-    if (!lineas.length || lineas.some((l) => !l.producto_id)) return fail(res, 400, 'Falta el producto.');
+    if (!lineas.length || lineas.some((l) => !esUUID(l.producto_id) || (l.variante_id && !esUUID(l.variante_id)))) {
+      return fail(res, 400, 'Producto inválido.');
+    }
     if (!isEmail(email)) return fail(res, 400, 'Email inválido.');
 
     // Datos de envío (obligatorios: se manda apenas se confirma el pago).
     const d = body.direccion || {};
     const direccion = {
-      calle: (d.calle || '').trim(),
-      ciudad: (d.ciudad || '').trim(),
-      departamento: (d.departamento || '').trim(),
-      cp: (d.cp || '').trim(),
-      telefono: (d.telefono || '').trim(),
-      notas: (d.notas || '').trim(),
+      calle: limpiar(d.calle, 160),
+      ciudad: limpiar(d.ciudad, 100),
+      departamento: limpiar(d.departamento, 100),
+      cp: limpiar(d.cp, 20),
+      telefono: limpiar(d.telefono, 40),
+      notas: limpiar(d.notas, 300),
     };
     if (!direccion.calle || !direccion.ciudad || !direccion.departamento || !direccion.telefono) {
       return fail(res, 400, 'Completá la dirección, ciudad, departamento y teléfono.');
@@ -103,7 +109,22 @@ export default async function handler(req, res) {
       montoTotal += Number(producto.precio) * l.cantidad;
     }
 
+    // Reservar el stock AHORA (atómico, condicional). Si una línea se quedó
+    // sin stock entre la validación y acá, se devuelve lo ya reservado y se
+    // corta. Esto cierra la sobreventa de productos de stock 1.
+    const reservadas = [];
+    for (const it of itemsPedido) {
+      const r = it.variante_id
+        ? await sb.rpc('reservar_stock_variante', { p_variante_id: it.variante_id, p_cantidad: it.cantidad })
+        : await sb.rpc('reservar_stock', { p_producto_id: it.producto_id, p_cantidad: it.cantidad });
+      if (r.data === true) { reservadas.push(it); continue; }
+      await devolverStock(sb, reservadas);
+      const etq = it.variante ? `${it.nombre} (${it.variante})` : it.nombre;
+      return fail(res, 409, `Se agotó ${etq} mientras comprabas. Probá de nuevo.`);
+    }
+
     const codigo = generarCodigoPedido();
+    const venceEn = new Date(Date.now() + RESERVA_MIN * 60000).toISOString();
 
     const { data: pedido, error: e2 } = await sb
       .from('pedidos')
@@ -116,21 +137,31 @@ export default async function handler(req, res) {
         monto_total: montoTotal,
         estado_pago: 'pendiente',
         estado_envio: 'preparando',
+        stock_reservado: true,
+        reserva_vence_en: venceEn,
       })
       .select('id,codigo_publico')
       .single();
-    if (e2) throw e2;
+    if (e2) { await devolverStock(sb, reservadas); throw e2; }
 
-    const pref = await crearPreferencia({
-      items: itemsPedido.map((it) => ({
-        id: it.variante_id || it.producto_id,
-        nombre: it.variante ? `${it.nombre} (${it.variante})` : it.nombre,
-        precio: it.precio,
-        cantidad: it.cantidad,
-      })),
-      codigoPedido: codigo,
-      payerEmail: email,
-    });
+    let pref;
+    try {
+      pref = await crearPreferencia({
+        items: itemsPedido.map((it) => ({
+          id: it.variante_id || it.producto_id,
+          nombre: it.variante ? `${it.nombre} (${it.variante})` : it.nombre,
+          precio: it.precio,
+          cantidad: it.cantidad,
+        })),
+        codigoPedido: codigo,
+        payerEmail: email,
+      });
+    } catch (e) {
+      // No se pudo generar la preferencia → soltar el stock y anular el pedido.
+      await devolverStock(sb, reservadas);
+      await sb.from('pedidos').update({ estado_pago: 'rechazado', stock_reservado: false }).eq('id', pedido.id);
+      throw e;
+    }
 
     await sb.from('pedidos').update({ mp_preference_id: pref.id }).eq('id', pedido.id);
 
@@ -138,5 +169,13 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('[crear-pago]', err.message);
     fail(res, 500, 'No se pudo iniciar el pago.');
+  }
+}
+
+// Devuelve al stock lo reservado por un conjunto de líneas del pedido.
+async function devolverStock(sb, items) {
+  for (const it of items || []) {
+    if (it.variante_id) await sb.rpc('devolver_stock_variante', { p_variante_id: it.variante_id, p_cantidad: it.cantidad || 1 });
+    else await sb.rpc('devolver_stock', { p_producto_id: it.producto_id, p_cantidad: it.cantidad || 1 });
   }
 }

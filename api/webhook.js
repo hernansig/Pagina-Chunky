@@ -51,29 +51,54 @@ export default async function handler(req, res) {
     if (!pedido) { res.statusCode = 200; return res.end('pedido inexistente'); }
 
     if (estado === 'approved') {
-      // Idempotencia: si ya estaba pagado, no volver a descontar stock.
-      if (pedido.estado_pago === 'pagado') { res.statusCode = 200; return res.end('ya procesado'); }
+      // Defensa en profundidad: el monto pagado debe coincidir con el total.
+      const pagado = Number(pago.transaction_amount);
+      const esperado = Number(pedido.monto_total);
+      if (isFinite(pagado) && isFinite(esperado) && Math.abs(pagado - esperado) > 1) {
+        console.warn('[webhook] monto no coincide', { codigo, pagado, esperado });
+        await avisarDueno({
+          subject: `⚠ Pago con monto distinto — ${codigo}`,
+          html: plantilla({
+            titulo: 'Revisar pago',
+            cuerpoHtml: `El pago del pedido <b>${codigo}</b> fue de <b>$${pagado}</b> pero el total del pedido es <b>$${esperado}</b>.<br>
+              No se confirmó automáticamente. Revisalo en MercadoPago antes de enviar.`,
+          }),
+        });
+        res.statusCode = 200; return res.end('monto no coincide');
+      }
 
-      await sb.from('pedidos')
-        .update({ estado_pago: 'pagado', mp_payment_id: String(dataId) })
-        .eq('id', pedido.id);
+      // Idempotencia ATÓMICA: un solo webhook "gana" el marcado a pagado.
+      // (check-then-update no atómico permitía descontar stock dos veces).
+      const { data: claim } = await sb.from('pedidos')
+        .update({ estado_pago: 'pagado', mp_payment_id: String(dataId), stock_reservado: false })
+        .eq('id', pedido.id).neq('estado_pago', 'pagado').select('id');
+      if (!claim || !claim.length) { res.statusCode = 200; return res.end('ya procesado'); }
 
-      // Descontar stock (funciones atómicas). Si el item tiene variante,
-      // se descuenta de la VARIANTE comprada, no del producto general.
-      for (const item of pedido.productos || []) {
-        if (item.variante_id) {
-          await sb.rpc('descontar_stock_variante', {
-            p_variante_id: item.variante_id,
-            p_cantidad: item.cantidad || 1,
-          });
-        } else {
-          await sb.rpc('descontar_stock', {
-            p_producto_id: item.producto_id,
-            p_cantidad: item.cantidad || 1,
+      // Stock: si se reservó al crear la orden, ya está descontado. Si no
+      // (orden vieja, o pago tardío sobre una orden liberada), se descuenta
+      // ahora de forma condicional; si faltara stock, se avisa al dueño.
+      if (!pedido.stock_reservado) {
+        const sinStock = [];
+        for (const item of pedido.productos || []) {
+          const r = item.variante_id
+            ? await sb.rpc('reservar_stock_variante', { p_variante_id: item.variante_id, p_cantidad: item.cantidad || 1 })
+            : await sb.rpc('reservar_stock', { p_producto_id: item.producto_id, p_cantidad: item.cantidad || 1 });
+          if (r.data !== true) sinStock.push(item);
+        }
+        if (sinStock.length) {
+          await avisarDueno({
+            subject: `⚠ Venta sin stock — ${codigo}`,
+            html: plantilla({
+              titulo: 'Venta confirmada sin stock',
+              cuerpoHtml: `El pedido <b>${codigo}</b> se pagó pero algún producto ya no tenía stock:
+                <br>${sinStock.map((i) => `${i.nombre}${i.variante ? ` (${i.variante})` : ''}`).join('<br>')}<br>
+                Revisá disponibilidad antes de enviar.`,
+            }),
           });
         }
       }
-      // Marcar reservas activas de esos productos como convertidas.
+
+      // Marcar reservas (24h) activas de esos productos como convertidas.
       for (const item of pedido.productos || []) {
         await sb.from('reservas')
           .update({ estado: 'convertida_en_pedido' })
@@ -96,9 +121,18 @@ export default async function handler(req, res) {
 
       await notificarPagoConfirmado(pedido);
     } else if (estado === 'rejected' || estado === 'cancelled') {
-      await sb.from('pedidos')
-        .update({ estado_pago: 'rechazado', mp_payment_id: String(dataId) })
-        .eq('id', pedido.id);
+      // Soltar la reserva de stock de forma atómica (solo un webhook la devuelve).
+      const { data: claim } = await sb.from('pedidos')
+        .update({ estado_pago: 'rechazado', mp_payment_id: String(dataId), stock_reservado: false })
+        .eq('id', pedido.id).eq('stock_reservado', true).select('id');
+      if (claim && claim.length) {
+        await devolverStock(sb, pedido.productos);
+      } else {
+        // sin reserva que soltar; marcar rechazado solo si seguía pendiente
+        await sb.from('pedidos')
+          .update({ estado_pago: 'rechazado', mp_payment_id: String(dataId) })
+          .eq('id', pedido.id).eq('estado_pago', 'pendiente');
+      }
     }
     // pending / in_process: no cambiamos nada, esperamos otra notificación.
 
@@ -108,6 +142,14 @@ export default async function handler(req, res) {
     console.error('[webhook]', err.message);
     // 500 → MP reintenta (cubre errores transitorios de DB/red).
     fail(res, 500, 'error procesando');
+  }
+}
+
+// Devuelve al stock lo que un pedido tenía reservado (pago rechazado).
+async function devolverStock(sb, items) {
+  for (const it of items || []) {
+    if (it.variante_id) await sb.rpc('devolver_stock_variante', { p_variante_id: it.variante_id, p_cantidad: it.cantidad || 1 });
+    else await sb.rpc('devolver_stock', { p_producto_id: it.producto_id, p_cantidad: it.cantidad || 1 });
   }
 }
 

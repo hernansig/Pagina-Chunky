@@ -29,6 +29,7 @@
     <div class="logo"><span class="l1">CHUNKY</span><span class="l2">RUNNER</span></div>
     <div class="sub">2 corazones · juntá metros · acertá el checkpoint = x1.5</div>
     <button id="playBtn" class="btn">JUGAR</button>
+    <div id="cf-turnstile" style="margin-top:4px"></div>
     <div class="help">deslizá ← → moverte · deslizá ↑ o tocá saltar<br>(teclado: flechas / WASD / espacio)</div>
   </div>
 
@@ -84,6 +85,35 @@
   if (!window.CHKAuth || !(await window.CHKAuth.requireAuth())) return;  // redirige si no hay sesión
   document.getElementById('authGate').style.display = 'none';
   document.getElementById('startScreen').classList.remove('hidden');
+
+  // Captcha anti-bot (Cloudflare Turnstile) — OPCIONAL. Solo se renderiza si
+  // hay TURNSTILE_SITE_KEY configurada; si no, el widget queda invisible y el
+  // juego funciona igual. Expone CR.captchaToken()/CR.captchaReset() para que
+  // leaderboard.js mande el token al iniciar cada partida.
+  (async function initCaptcha() {
+    try {
+      const cfg = await fetch('/api/app/config').then((r) => r.json());
+      const siteKey = cfg && cfg.turnstileSiteKey;
+      if (!siteKey) return;                       // captcha apagado → nada que hacer
+      let tok = null, widgetId = null;
+      window.CR = window.CR || {};
+      window.CR.captchaToken = () => tok;
+      window.CR.captchaReset = () => { tok = null; if (window.turnstile && widgetId != null) { try { window.turnstile.reset(widgetId); } catch (e) {} } };
+      window.__cfRender = function () {
+        if (!window.turnstile) return;
+        widgetId = window.turnstile.render('#cf-turnstile', {
+          sitekey: siteKey, theme: 'dark', size: 'flexible',
+          callback: (t) => { tok = t; },
+          'expired-callback': () => { tok = null; },
+          'error-callback': () => { tok = null; },
+        });
+      };
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=__cfRender&render=explicit';
+      s.async = true; s.defer = true;
+      document.head.appendChild(s);
+    } catch (e) { /* si algo falla, el juego sigue sin captcha */ }
+  })();
 
   // Comprar vida (descuenta del saldo guardado, server-side).
   const revMsg = document.getElementById('revMsg');

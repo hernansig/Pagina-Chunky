@@ -1,6 +1,6 @@
 import { supa } from '../lib/supabase.js';
 import { json, fail, methodNotAllowed, readBody } from '../lib/http.js';
-import { verificarFirmaCorta } from '../lib/util.js';
+import { verificarFirmaCorta, limpiar } from '../lib/util.js';
 import { permitido, ipDe } from '../lib/ratelimit.js';
 
 // POST /api/resena — recibe la reseña desde el link del mail (sin login).
@@ -14,11 +14,11 @@ export default async function handler(req, res) {
     }
 
     const body = await readBody(req);
-    const codigo = (body.codigo || '').trim().toUpperCase();
-    const token = (body.token || '').trim();
+    const codigo = limpiar(body.codigo, 20).toUpperCase();
+    const token = limpiar(body.token, 64);
     const rating = parseInt(body.rating, 10);
-    const texto = (body.texto || '').trim();
-    const nombre = (body.nombre || '').trim() || null;
+    const texto = limpiar(body.texto, 600);
+    const nombre = limpiar(body.nombre, 80) || null;
 
     if (!codigo || !verificarFirmaCorta(codigo, token)) return fail(res, 401, 'Link inválido.');
     if (!(rating >= 1 && rating <= 5)) return fail(res, 400, 'Puntuación inválida.');

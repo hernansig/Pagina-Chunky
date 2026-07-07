@@ -24,7 +24,28 @@ export default async function handler(req, res) {
 async function liberarReservas(res) {
   const sb = supa();
   const ahora = new Date();
-  let vencidas = 0, recordatorios = 0;
+  let vencidas = 0, recordatorios = 0, checkoutsLiberados = 0;
+
+  // Checkouts abandonados: pedidos pendientes con stock reservado cuyo plazo
+  // venció → devolver el stock y marcar el pedido como rechazado. El claim es
+  // atómico (por pedido) para que dos corridas del cron no devuelvan dos veces.
+  const { data: colgados } = await sb
+    .from('pedidos')
+    .select('id,productos')
+    .eq('estado_pago', 'pendiente').eq('stock_reservado', true)
+    .lt('reserva_vence_en', ahora.toISOString());
+  for (const p of colgados || []) {
+    const { data: claim } = await sb.from('pedidos')
+      .update({ estado_pago: 'rechazado', stock_reservado: false })
+      .eq('id', p.id).eq('stock_reservado', true).eq('estado_pago', 'pendiente')
+      .select('id');
+    if (!claim || !claim.length) continue;   // otro proceso ya lo tomó
+    for (const it of p.productos || []) {
+      if (it.variante_id) await sb.rpc('devolver_stock_variante', { p_variante_id: it.variante_id, p_cantidad: it.cantidad || 1 });
+      else await sb.rpc('devolver_stock', { p_producto_id: it.producto_id, p_cantidad: it.cantidad || 1 });
+    }
+    checkoutsLiberados++;
+  }
 
   // Vencer reservas expiradas y devolver stock.
   const { data: expiradas, error: e1 } = await sb
@@ -72,7 +93,7 @@ async function liberarReservas(res) {
     await sb.from('reservas').update(actualizar).eq('id', r.id);
     recordatorios++;
   }
-  json(res, 200, { ok: true, vencidas, recordatorios });
+  json(res, 200, { ok: true, vencidas, recordatorios, checkoutsLiberados });
 }
 
 // ── resenas ───────────────────────────────────────────────────
