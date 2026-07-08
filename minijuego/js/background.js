@@ -57,11 +57,15 @@
     g.fillStyle = hg; g.fillRect(0, HORIZON - 22, SW, 28);
   }
 
+  // Cada brasa tiene una "profundidad" (0 lejos … 1 cerca): las cercanas suben
+  // más rápido, son más grandes/brillantes y se desplazan más al mover la cámara
+  // (parallax) → sensación de profundidad real.
   function mkEmber(start) {
+    const depth = Math.random();
     return { x: Math.random() * W, y: start ? HORIZON + Math.random() * (H - HORIZON) : H + 8,
-      vy: 8 + Math.random() * 24, r: Math.random() < 0.3 ? 2 : 1, a: Math.random() * 0.5 + 0.2, red: Math.random() < 0.78 };
+      vy: 8 + depth * 34, r: depth < 0.4 ? 1 : 2, a: 0.18 + depth * 0.45, red: Math.random() < 0.78, depth };
   }
-  function init() { build(); floorGrad = null; embers.length = 0; for (let i = 0; i < 36; i++) embers.push(mkEmber(true)); }
+  function init() { build(); floorGrad = null; embers.length = 0; for (let i = 0; i < 48; i++) embers.push(mkEmber(true)); }
   function update(dt) {
     for (const e of embers) {
       e.y -= e.vy * dt; e.x += Math.sin((e.y + e.x) * 0.02) * 6 * dt;
@@ -105,8 +109,11 @@
     }
     ctx.fillStyle = 'rgba(204,0,0,0.5)'; ctx.fillRect(0, HORIZON - 1, W, 2);
 
-    // brasas rojas de ambiente
-    for (const e of embers) { ctx.globalAlpha = e.a; ctx.fillStyle = e.red ? '#cc0000' : '#e8e0d0'; ctx.fillRect(e.x | 0, e.y | 0, e.r, e.r); }
+    // brasas rojas de ambiente (con parallax por profundidad respecto de la cámara)
+    for (const e of embers) {
+      ctx.globalAlpha = e.a; ctx.fillStyle = e.red ? '#cc0000' : '#e8e0d0';
+      ctx.fillRect((e.x + cam * e.depth * 46) | 0, e.y | 0, e.r, e.r);
+    }
     ctx.globalAlpha = 1;
   }
 

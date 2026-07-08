@@ -129,9 +129,16 @@
     },
     isMuted() { return muted; },
     sfx: {
-      coin() { tone({ f: 880, f2: 1500, d: 0.09, type: 'square', v: 0.05 }); },
+      // La moneda sube de tono con el combo (chiptune "arpegio" al encadenar).
+      coin(step) {
+        const s = Math.min(step || 0, 14);
+        const base = 760 + s * 42;
+        tone({ f: base, f2: base * 1.7 + 200, d: 0.09, type: 'square', v: 0.05 });
+      },
       jump() { tone({ f: 300, f2: 680, d: 0.16, type: 'square', v: 0.05 }); },
       lane() { tone({ f: 210, f2: 250, d: 0.05, type: 'square', v: 0.03 }); },
+      power() { tone({ f: 500, f2: 900, d: 0.10, type: 'triangle', v: 0.05 }); tone({ f: 780, f2: 1320, d: 0.14, type: 'square', v: 0.04 }); },
+      checkpoint() { [523, 659, 784, 1046].forEach((f) => tone({ f, f2: f * 1.02, d: 0.16, type: 'square', v: 0.05 })); },  // arpegio ascendente celebratorio
       good() { tone({ f: 520, f2: 1040, d: 0.20, type: 'triangle', v: 0.06 }); },
       bad()  { tone({ f: 360, f2: 140, d: 0.24, type: 'sawtooth', v: 0.06 }); },
       hit()  { tone({ f: 180, f2: 50, d: 0.40, type: 'sawtooth', v: 0.09 }); },

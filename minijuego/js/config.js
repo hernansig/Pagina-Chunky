@@ -51,7 +51,6 @@ window.CR = window.CR || {};
     METERS: 3.2,                              // z → metros (distancia para ranking mensual)
     JUMP_V: 457, GRAV: 1306,                  // físicas del salto (apex ~80)
     ZFAR: { garbage: 9, zombie: 10, moto: 13, coin: 9, power: 9 },
-    STORE_KEY: 'chunky_mvd_scores',
   };
 
   // ── Matemática de perspectiva ─────────────────────────────────

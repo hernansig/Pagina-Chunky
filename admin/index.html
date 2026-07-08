@@ -80,6 +80,15 @@ const api = async (path, opts = {}) => {
 };
 const money = n => '$' + Number(n || 0).toLocaleString('es-UY');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const driveDirecto = url => {
+  const u = String(url || '').trim();
+  if (!u) return u;
+  const lh = u.match(/lh3\.googleusercontent\.com\/d\/([-\w]+)/);
+  if (lh) return 'https://lh3.googleusercontent.com/d/' + lh[1];
+  let m = u.match(/\/file\/d\/([-\w]+)/) || u.match(/[?&]id=([-\w]+)/);
+  const id = m ? m[1] : (/^[-\w]{20,}$/.test(u) ? u : null);
+  return id ? 'https://lh3.googleusercontent.com/d/' + id : u;
+};
 const dirTexto = d => {
   if (!d || !d.calle) return '';
   let t = esc(d.calle);
@@ -152,7 +161,7 @@ async function vProductos() {
       <div><label class="form-label">Precio</label><input id="pf-precio" type="number" style="width:100%"></div>
       <div><label class="form-label">Talle</label><input id="pf-talle" style="width:100%"></div>
       <div><label class="form-label">Stock</label><input id="pf-stock" type="number" value="1" style="width:100%"></div>
-      <div class="full"><label class="form-label">Foto URL</label><input id="pf-foto" style="width:100%" placeholder="https://..."></div>
+      <div class="full"><label class="form-label">Foto URL (pegá el link de Google Drive, se convierte solo)</label><input id="pf-foto" style="width:100%" placeholder="https://drive.google.com/file/d/..."></div>
       <div><button class="btn mini" id="pf-btn"><span>Agregar</span></button></div>
     </div>
     <table><thead><tr><th>Producto</th><th>Precio</th><th>Talle</th><th>Disp.</th><th>Activo</th><th></th></tr></thead>
@@ -182,7 +191,7 @@ async function vProductos() {
       await api('/api/admin/productos', { method: 'POST', body: {
         nombre, precio: Number(precio), talle: document.getElementById('pf-talle').value.trim(),
         stock_total: parseInt(document.getElementById('pf-stock').value, 10) || 1,
-        foto_url: document.getElementById('pf-foto').value.trim() || null,
+        foto_url: driveDirecto(document.getElementById('pf-foto').value) || null,
       }});
       vProductos();
     } catch (e) { alert(e.message); }
@@ -196,7 +205,7 @@ async function vProductos() {
           id, nombre: tr.querySelector('.e-nombre').value, precio: Number(tr.querySelector('.e-precio').value),
           talle: tr.querySelector('.e-talle').value, stock_disponible: parseInt(tr.querySelector('.e-stock').value, 10),
           activo: tr.querySelector('.e-activo').checked,
-          foto_url: tr.querySelector('.e-foto').value.trim() || null,
+          foto_url: driveDirecto(tr.querySelector('.e-foto').value) || null,
         }});
         CHK.toast('Guardado');
       } catch (e) { alert(e.message); }
@@ -208,7 +217,7 @@ async function vProductos() {
           precio: Number(tr.querySelector('.e-precio').value),
           talle: tr.querySelector('.e-talle').value,
           stock_total: parseInt(tr.querySelector('.e-stock').value, 10) || 1,
-          foto_url: tr.querySelector('.e-foto').value.trim() || null,
+          foto_url: driveDirecto(tr.querySelector('.e-foto').value) || null,
           orden: parseInt(tr.dataset.orden, 10) || 0,
         }});
         CHK.toast('Duplicado');
@@ -225,6 +234,11 @@ async function vProductos() {
       row.style.display = abierto ? 'none' : '';
       if (!abierto) cargarVariantes(row.querySelector('td'), id);
     });
+  });
+
+  // Convertir links de Google Drive a formato directo al salir del campo de foto.
+  vista().querySelectorAll('#pf-foto, .e-foto').forEach((inp) => {
+    inp.addEventListener('blur', () => { const v = driveDirecto(inp.value); if (v !== inp.value) inp.value = v; });
   });
 }
 

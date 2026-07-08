@@ -54,13 +54,16 @@
   // ── Estado de partida ─────────────────────────────────────────
   function newGame() {
     return {
-      t: 0, dist: 0, metros: 0, coins: 0, speed: K.BASE_Z, scroll: 0, cam: 0,
+      t: 0, metros: 0, coins: 0, speed: K.BASE_Z, scroll: 0, cam: 0,
       player: { lane: 1, px: 0, jumping: false, jumpVel: 0, jumpOff: 0, jumpPrev: 0, hopT: 0, shield: false, invuln: 0, run: 0, vidas: 2 },
       obstacles: [], coinsArr: [], powerups: [], particles: [], pops: [],
       spawnT: 1.0, coinT: 0.8, powerT: 7, trucada: false,
       checkpointAt: CHECKPOINT_CADA, checkpointFrom: 0, checkpointNum: 0,
+      combo: 0, comboT: 0,                          // racha de monedas (juice)
       fx: { mult: 1, sTimer: 0, sLabel: null, sGood: true, rainTimer: 0, scoreMult: 1, scoreMultT: 0 },
-      banner: null, shake: 0, coinFlash: 0, finalCoins: 0, finalMetros: 0,
+      banner: null, shake: 0,
+      coinFlash: 0,                                 // destello dorado al juntar monedas
+      flash: 0, flashCol: BONE,                     // destello de evento (checkpoint/power/golpe)
     };
   }
 
@@ -81,7 +84,7 @@
     for (let i = 0; i < n; i++)
       a.push({ x, y, vx: (Math.random() - 0.5) * 320, vy: -Math.random() * 300, life: 0.5, color, s: 2 + Math.random() * 2 });
   }
-  function pop(x, y, text, color) { game.pops.push({ x, y, text, color, life: 0.9 }); }
+  function pop(x, y, text, color, size) { game.pops.push({ x, y, text, color, size: size || 12, life: 0.9 }); }
   function banner(text, color) { game.banner = { text, color, t: 1.7 }; }
 
   // ── Spawns ────────────────────────────────────────────────────
@@ -156,12 +159,13 @@
     game.powerups.push({ lane: rnd(3), z: K.ZFAR.power, phase: Math.random() * 6, got: false });
     game.powerT = 10 + Math.random() * 7;
   }
+  function flash(color) { game.flash = 1; game.flashCol = color; }
   function applyPowerup() {
     const fx = game.fx, r = rnd(4);
-    if (r === 0)      { fx.mult = 1.5; fx.sTimer = 5; fx.sLabel = 'TURBO'; fx.sGood = true;  banner('TURBO · +VELOCIDAD', BONE); Audio.sfx.good(); }
-    else if (r === 1) { game.player.shield = true; banner('ESCUDO ACTIVO', BONE); Audio.sfx.good(); }
-    else if (r === 2) { fx.mult = 0.6; fx.sTimer = 5; fx.sLabel = 'LENTO'; fx.sGood = false; banner('LENTO · -VELOCIDAD', RED); Audio.sfx.bad(); }
-    else              { fx.rainTimer = 5; banner('LLUVIA DE OBSTÁCULOS', RED); Audio.sfx.bad(); }
+    if (r === 0)      { fx.mult = 1.5; fx.sTimer = 5; fx.sLabel = 'TURBO'; fx.sGood = true;  banner('TURBO · +VELOCIDAD', BONE); flash(GREEN); Audio.sfx.good(); }
+    else if (r === 1) { game.player.shield = true; banner('ESCUDO ACTIVO', BONE); flash(BONE); Audio.sfx.good(); }
+    else if (r === 2) { fx.mult = 0.6; fx.sTimer = 5; fx.sLabel = 'LENTO'; fx.sGood = false; banner('LENTO · -VELOCIDAD', RED); flash(REDM); Audio.sfx.bad(); }
+    else              { fx.rainTimer = 5; banner('LLUVIA DE OBSTÁCULOS', RED); flash(REDM); Audio.sfx.bad(); }
   }
   function spawnInterval() {
     let iv = Math.max(0.6, 1.3 * Math.pow(0.9, Math.floor(game.t / 18)));
@@ -188,7 +192,7 @@
     if (fx.scoreMultT > 0) { fx.scoreMultT -= dt; if (fx.scoreMultT <= 0) fx.scoreMult = 1; }
     const eff = g.speed * Math.min(K.MULT_MAX, fx.mult);
 
-    g.dist += eff * dt; g.scroll += eff * dt;
+    g.scroll += eff * dt;
     g.metros += eff * dt * K.METERS * fx.scoreMult;  // PUNTAJE = metros (×boost si activo)
 
     // CHECKPOINT: al alcanzar la marca, pausa y pregunta (bien espaciados).
@@ -211,6 +215,8 @@
     if (p.invuln > 0) p.invuln -= dt;
     if (g.shake > 0) g.shake -= dt;
     if (g.coinFlash > 0) g.coinFlash -= dt * 4;
+    if (g.flash > 0) g.flash -= dt * 2.6;
+    if (g.comboT > 0) { g.comboT -= dt; if (g.comboT <= 0) g.combo = 0; }   // se corta la racha
 
     // spawns
     g.spawnT -= dt; if (g.spawnT <= 0) { spawnObstacle(); g.spawnT = spawnInterval(); }
@@ -234,9 +240,10 @@
       if (o.jumpable && p.jumpOff > 30) continue;
       if (p.invuln > 0) continue;
       if (dios) continue;         // modo dios: los obstáculos no hacen nada
-      if (p.shield) { p.shield = false; p.invuln = 1.0; g.shake = 0.25; o.z = -1; burst(K.PLAYER_X, groundY(K.PLAYER_Z) - 70, BONE, 14); banner('¡ESCUDO ROTO!', BONE); Audio.sfx.hit(); }
+      g.combo = 0; g.comboT = 0;                                  // el golpe corta la racha
+      if (p.shield) { p.shield = false; p.invuln = 1.0; g.shake = 0.25; o.z = -1; burst(K.PLAYER_X, groundY(K.PLAYER_Z) - 70, BONE, 14); flash(BONE); banner('¡ESCUDO ROTO!', BONE); Audio.sfx.hit(); }
       else {
-        o.z = -1; p.vidas -= 1;
+        o.z = -1; p.vidas -= 1; flash(REDM);
         if (p.vidas > 0) { respawn(); return; }
         ofrecerRevivir(); return;
       }
@@ -259,9 +266,14 @@
       const inWindow = c.z <= K.COLLECT_Z && c.z > 0;
       const crossed = c.pz != null && c.z <= K.PLAYER_Z && c.pz > K.PLAYER_Z;   // cruzó el plano del jugador
       if (laneOk && heightOk && (inWindow || crossed)) {
-        c.got = true; g.coins++; g.coinFlash = 1;
+        c.got = true; g.coins++;
+        g.combo++; g.comboT = 2.0;                                 // encadena la racha
+        g.coinFlash = Math.min(1, 0.4 + g.combo * 0.04);           // destello dorado (sube con el combo)
         const cx = sx(c.lane - 1, c.z, g.cam), cy = groundY(c.z) - (28 + c.h) * pp(c.z);
-        burst(cx, cy, GOLD, 6); pop(cx, cy - 6, '+1', GOLD); Audio.sfx.coin();
+        const big = g.combo >= 5;
+        burst(cx, cy, GOLD, big ? 12 : 6);
+        pop(cx, cy - 6, g.combo >= 2 ? '+1 x' + g.combo : '+1', GOLD, big ? 16 : 12);
+        Audio.sfx.coin(g.combo);
         if (DEBUG) console.log('coin OK', { lane: c.lane, z: +c.z.toFixed(2), crossed });
       } else if (DEBUG && c.z <= K.COLLECT_Z && c.z > 0 && !c._dbg) {
         c._dbg = true;
@@ -273,7 +285,7 @@
       const laneOk = Math.abs(contLane - u.lane) < 0.6;
       const inWindow = u.z <= K.COLLECT_Z && u.z > 0;
       const crossed = u.pz != null && u.z <= K.PLAYER_Z && u.pz > K.PLAYER_Z;
-      if (laneOk && (inWindow || crossed)) { u.got = true; burst(sx(u.lane - 1, u.z, g.cam), groundY(u.z) - 46 * pp(u.z), BONE, 12); applyPowerup(); }
+      if (laneOk && (inWindow || crossed)) { u.got = true; burst(sx(u.lane - 1, u.z, g.cam), groundY(u.z) - 46 * pp(u.z), BONE, 14); Audio.sfx.power(); applyPowerup(); }
     }
 
     // limpieza
@@ -401,7 +413,7 @@
 
     for (const pt of g.particles) { ctx.globalAlpha = Math.max(0, pt.life * 2); R(pt.x, pt.y, pt.s, pt.s, pt.color); }
     ctx.globalAlpha = 1;
-    for (const pk of g.pops) { ctx.globalAlpha = Math.min(1, pk.life * 1.4); pf(pk.text, pk.x, pk.y, 12, pk.color, 'center'); }
+    for (const pk of g.pops) { ctx.globalAlpha = Math.min(1, pk.life * 1.4); pf(pk.text, pk.x, pk.y, pk.size || 12, pk.color, 'center'); }
     ctx.globalAlpha = 1;
 
     ctx.restore();
@@ -411,6 +423,18 @@
       vignette.addColorStop(0, 'rgba(0,0,0,0)'); vignette.addColorStop(1, 'rgba(0,0,0,0.58)');
     }
     ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+
+    // ── Destellos de pantalla (juice) ──
+    // Monedas: pulso dorado sutil aditivo. Eventos: tinte del color del evento.
+    if (g.coinFlash > 0.01) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = g.coinFlash * 0.10; ctx.fillStyle = GOLD; ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    }
+    if (g.flash > 0.01) {
+      ctx.globalAlpha = Math.min(0.34, g.flash * 0.34); ctx.fillStyle = g.flashCol; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
 
     if (state !== 'start') drawHUD();
     // feedback del modo dios también en la pantalla de inicio
@@ -457,6 +481,13 @@
     if (g.fx.sTimer > 0) { pf((g.fx.sGood ? '▲ ' : '▼ ') + g.fx.sLabel, 16, y, 11, g.fx.sGood ? BONE : REDM); y += 22; }
     if (g.fx.rainTimer > 0) { pf('LLUVIA', 16, y, 11, REDM); }
     if (g.banner && g.banner.t > 0) { ctx.globalAlpha = Math.min(1, g.banner.t); pf(g.banner.text, W / 2, 70, 14, g.banner.color, 'center'); ctx.globalAlpha = 1; }
+    // Contador de combo (crece y late con la racha).
+    if (g.combo >= 2 && g.comboT > 0) {
+      const size = 15 + Math.min(g.combo, 20) * 0.6 + Math.sin(g.t * 20) * 1.2;
+      ctx.globalAlpha = Math.min(1, g.comboT * 1.4);
+      pf('COMBO x' + g.combo, W / 2, 104, Math.round(size), GOLD, 'center');
+      ctx.globalAlpha = 1;
+    }
   }
 
   // ── Checkpoint (trivia en overlay DOM) ────────────────────────
@@ -495,7 +526,7 @@
     state = 'playing';
     // El checkpoint siempre limpia el camino (no te frena para matarte al salir).
     checkpointRespawn(ok);
-    if (ok) { banner('¡CORRECTO! x1.5 METROS · 7s', GREEN); Audio.sfx.good(); }
+    if (ok) { banner('¡CORRECTO! x1.5 METROS · 7s', GREEN); flash(GREEN); Audio.sfx.checkpoint(); }
     else { banner('Fallaste · camino limpio', MUTED); Audio.sfx.bad(); }
   }
 
@@ -543,7 +574,6 @@
     state = 'over'; game.shake = 0.3; Audio.sfx.bad();
     if (Audio.stopMusic) Audio.stopMusic();
     const metros = Math.floor(game.metros), coins = game.coins;
-    game.finalMetros = metros; game.finalCoins = coins;
     const goD = document.getElementById('goDist'); if (goD) goD.textContent = metros;
     const goC = document.getElementById('goCoins'); if (goC) goC.textContent = coins;
     const stt = document.getElementById('saveStatus');
