@@ -31,14 +31,16 @@
   }
 
   // metros = puntaje de ranking; monedas = monedas juntadas (se bancan al saldo).
+  // Se manda SIEMPRE (aunque no haya token de sesión): las monedas se acreditan
+  // igual; el token solo habilita que el puntaje entre al ranking.
   async function save(metros, monedas) {
     try {
       const t = await token();
-      if (!t || !sessionToken) return null;
+      if (!t) return null;
       const res = await fetch('/api/app/guardar-puntaje', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t },
-        body: JSON.stringify({ metros, monedas, token: sessionToken }),
+        body: JSON.stringify({ metros, monedas, token: sessionToken || null }),
       });
       const j = await res.json();
       sessionToken = null;   // single-use: no reintentar con el mismo token

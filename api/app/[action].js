@@ -150,49 +150,65 @@ async function guardarPuntaje(req, res) {
   const u = await usuarioDeReq(req);
   if (!u) return fail(res, 401, 'No autenticado.');
 
+  if (!(await permitido(`guardar:${u.id}`, 3600, 60))) return fail(res, 429, 'Demasiadas partidas seguidas. Probá en un rato.');
+
   const body = await readBody(req);
   const token = (body.token || '').trim();
   const metros = clampInt(body.metros, 0, 1000000);
-  const monedas = clampInt(body.monedas != null ? body.monedas : body.puntaje, 0, 100000);
-  if (!token) return fail(res, 400, 'Falta el token de la partida. Actualizá la página.');
+  const monedas = clampInt(body.monedas != null ? body.monedas : body.puntaje, 0, 20000);
 
   const sb = supa();
 
-  // Buscar la sesión de esta partida (debe ser del usuario y estar abierta).
-  const { data: ses } = await sb.from('juego_sesiones')
-    .select('id,iniciada_en,cerrada').eq('token', token).eq('usuario_id', u.id).maybeSingle();
-  if (!ses) return fail(res, 403, 'Sesión de partida inválida.');
-
-  // Cerrar la sesión de forma ATÓMICA (una sola escritura gana el race).
-  // Si otra request ya la cerró → esta partida no se guarda dos veces.
-  const { data: cerrada } = await sb.from('juego_sesiones')
-    .update({ cerrada: true, metros, monedas })
-    .eq('id', ses.id).eq('cerrada', false).select('id');
-  if (!cerrada || !cerrada.length) return fail(res, 409, 'Esa partida ya fue guardada.');
-
-  // Plausibilidad: ¿es posible ese puntaje en el tiempo real transcurrido?
-  const segs = Math.max(1, (Date.now() - new Date(ses.iniciada_en).getTime()) / 1000);
-  const maxMetros = segs * MAX_METROS_POR_SEG + MARGEN_METROS;
-  const maxMonedas = segs * MAX_MONEDAS_POR_SEG + MARGEN_MONEDAS;
-  if (metros > maxMetros || monedas > maxMonedas) {
-    console.warn('[guardar-puntaje] rechazado por implausible', { usuario: u.id, segs: Math.round(segs), metros, monedas });
-    return fail(res, 422, 'Puntaje inválido.');   // sesión ya cerrada: no se puede reintentar
+  // ── Validar la sesión (si vino token): decide si el puntaje puede ENTRAR
+  //    AL RANKING. Las MONEDAS se bancan igual, con sesión o sin ella (así el
+  //    juego sigue acreditando monedas aunque la tabla anti-cheat no exista). ──
+  let rankingOk = false;
+  if (token) {
+    const { data: ses } = await sb.from('juego_sesiones')
+      .select('id,iniciada_en,cerrada').eq('token', token).eq('usuario_id', u.id).maybeSingle();
+    if (ses) {
+      // Cerrar la sesión atómicamente (single-use, anti-replay).
+      const { data: cerrada } = await sb.from('juego_sesiones')
+        .update({ cerrada: true, metros, monedas })
+        .eq('id', ses.id).eq('cerrada', false).select('id');
+      if (!cerrada || !cerrada.length) return fail(res, 409, 'Esa partida ya fue guardada.');
+      // Plausibilidad: ¿es posible ese puntaje en el tiempo real transcurrido?
+      const segs = Math.max(1, (Date.now() - new Date(ses.iniciada_en).getTime()) / 1000);
+      if (metros > segs * MAX_METROS_POR_SEG + MARGEN_METROS || monedas > segs * MAX_MONEDAS_POR_SEG + MARGEN_MONEDAS) {
+        console.warn('[guardar-puntaje] implausible', { usuario: u.id, segs: Math.round(segs), metros, monedas });
+        return fail(res, 422, 'Puntaje inválido.');   // sesión ya cerrada: no reintentable
+      }
+      rankingOk = true;
+    }
+    // ses == null → token vencido o tabla ausente: se bancan monedas igual (sin ranking).
   }
 
-  const { error: insErr } = await sb.from('puntajes_mensuales')
-    .insert({ usuario_id: u.id, alias: u.alias, metros, puntaje: monedas });
-  if (insErr) {
-    console.error('[guardar-puntaje] insert', insErr.message);   // p.ej. NOT NULL de jugador_id/mes (esquema viejo)
-    return fail(res, 500, 'No se pudo guardar el puntaje.');
-  }
-  await prunearPartidas(sb, u.id);   // dejar solo las 10 mejores de la semana
-
+  // ── Las MONEDAS se acreditan SIEMPRE (independiente del ranking) ──
   let saldo = u.puntos_disponibles;
   if (monedas > 0) {
     const { data } = await sb.rpc('sumar_puntos', { p_usuario_id: u.id, p_delta: monedas });
-    saldo = data ?? (u.puntos_disponibles + monedas);
+    saldo = (data != null) ? data : (u.puntos_disponibles + monedas);
   }
-  json(res, 200, { ok: true, metros, monedas, puntos_disponibles: saldo });
+
+  // ── El puntaje entra al RANKING solo si es válido (sesión OK) y llega al top 10 ──
+  let enRanking = false;
+  if (rankingOk && metros > 0) enRanking = await guardarSiTop10(sb, u, metros, monedas);
+
+  json(res, 200, { ok: true, metros, monedas, en_ranking: enRanking, puntos_disponibles: saldo });
+}
+
+// Inserta el puntaje en el ranking SOLO si entra en el top 10 de la semana.
+async function guardarSiTop10(sb, u, metros, monedas) {
+  const desde = semanaDesde();
+  const { data: top } = await sb.from('puntajes_mensuales')
+    .select('metros').gte('creado_en', desde.toISOString())
+    .order('metros', { ascending: false }).limit(10);
+  if (top && top.length >= 10 && metros <= top[top.length - 1].metros) return false;   // no llega al top 10
+  const { error } = await sb.from('puntajes_mensuales')
+    .insert({ usuario_id: u.id, alias: u.alias, metros, puntaje: monedas });
+  if (error) { console.error('[guardar-puntaje] ranking insert', error.message); return false; }
+  await prunearPartidas(sb, u.id);
+  return true;
 }
 
 // Conserva solo las 10 mejores partidas (por metros) del usuario en la semana.

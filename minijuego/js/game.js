@@ -582,7 +582,11 @@
       if (stt) stt.textContent = 'modo dios: partida de prueba, no se guarda';
     } else if (Board.save) {
       if (stt) stt.textContent = 'Guardando...';
-      Board.save(metros, coins).then((r) => { if (stt) stt.textContent = r ? '✓ partida guardada' : 'No se pudo guardar (revisá tu sesión)'; });
+      Board.save(metros, coins).then((r) => {
+        if (!stt) return;
+        if (!r) { stt.textContent = 'No se pudieron guardar las monedas (revisá tu sesión)'; return; }
+        stt.textContent = '✓ +' + (r.monedas || 0) + ' monedas' + (r.en_ranking ? ' · ¡ENTRASTE AL TOP 10!' : '');
+      });
     }
     if (Board.render) Board.render();
     document.getElementById('overScreen').classList.remove('hidden');
