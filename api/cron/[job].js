@@ -31,7 +31,7 @@ async function liberarReservas(res) {
   // atómico (por pedido) para que dos corridas del cron no devuelvan dos veces.
   const { data: colgados } = await sb
     .from('pedidos')
-    .select('id,productos')
+    .select('id,productos,cupon_codigo')
     .eq('estado_pago', 'pendiente').eq('stock_reservado', true)
     .lt('reserva_vence_en', ahora.toISOString());
   for (const p of colgados || []) {
@@ -44,6 +44,8 @@ async function liberarReservas(res) {
       if (it.variante_id) await sb.rpc('devolver_stock_variante', { p_variante_id: it.variante_id, p_cantidad: it.cantidad || 1 });
       else await sb.rpc('devolver_stock', { p_producto_id: it.producto_id, p_cantidad: it.cantidad || 1 });
     }
+    // el cupón (si había) vuelve a quedar disponible
+    if (p.cupon_codigo) await sb.from('items_usuario').update({ usado_en: null }).eq('codigo', p.cupon_codigo);
     checkoutsLiberados++;
   }
 

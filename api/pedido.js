@@ -61,7 +61,7 @@ async function liberar(req, res) {
 
     const sb = supa();
     const { data: pedido } = await sb.from('pedidos')
-      .select('id,estado_pago,stock_reservado,productos')
+      .select('id,estado_pago,stock_reservado,productos,cupon_codigo')
       .eq('codigo_publico', codigo).maybeSingle();
     // No revelamos si el código existe o no: siempre 200.
     if (!pedido || pedido.estado_pago !== 'pendiente' || !pedido.stock_reservado) {
@@ -77,6 +77,8 @@ async function liberar(req, res) {
         if (it.variante_id) await sb.rpc('devolver_stock_variante', { p_variante_id: it.variante_id, p_cantidad: it.cantidad || 1 });
         else await sb.rpc('devolver_stock', { p_producto_id: it.producto_id, p_cantidad: it.cantidad || 1 });
       }
+      // el cupón (si había) vuelve a quedar disponible
+      if (pedido.cupon_codigo) await sb.from('items_usuario').update({ usado_en: null }).eq('codigo', pedido.cupon_codigo);
     }
     json(res, 200, { ok: true });
   } catch (err) {

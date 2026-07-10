@@ -32,7 +32,13 @@
     .btn-claim { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--bone); background:var(--bordo); border:1px solid var(--red); padding:6px 16px; cursor:pointer; transition:background .15s; }
     .btn-claim:hover { background:var(--red); color:#fff; }
     .btn-claim.claimed, .btn-claim:disabled { opacity:.5; cursor:default; }
-  </style>
+    .cupon-row { display:flex; justify-content:space-between; align-items:center; gap:12px; border-bottom:1px solid #1c1c1c; padding:12px 0; }
+    .cupon-info { min-width:0; }
+    .cupon-cod { font-family:'Permanent Marker',cursive; font-size:22px; color:var(--red); letter-spacing:2px; margin-top:4px; }
+    .cupon-vence { font-size:11px; color:var(--muted); letter-spacing:1px; margin-top:2px; }
+    .btn-copiar { font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:var(--bone); background:var(--bordo); border:1px solid var(--red); padding:8px 16px; cursor:pointer; transition:background .15s; white-space:nowrap; }
+    .btn-copiar:hover { background:var(--red); color:#fff; }
+</style>
 </head>
 <body>
 <div class="wrapper">
@@ -81,13 +87,13 @@ function vistaPerfil(d) {
   const av = u.avatar_url ? `<img src="${esc(u.avatar_url)}" alt="avatar" referrerpolicy="no-referrer">` : '';
   const pos = d.ranking && d.ranking.posicion ? `#${d.ranking.posicion}` : '—';
   const mejor = d.ranking ? (d.ranking.mejor || 0) : 0;
-  const ITEM_LBL = { envio_gratis: 'Envío gratis', chunky_bag: 'Chunky Bag', llavero_chunky: 'Llavero Chunky' };
-  const disp = (d.items || []).filter(i => i.estado === 'disponible');
-  const canj = (d.items || []).filter(i => i.estado === 'canjeado');
-  const itemsHtml = disp.length
-    ? disp.map(i => `<div class="ped-row"><span class="cod">${esc(ITEM_LBL[i.tipo_item] || i.tipo_item)}</span><button class="btn-claim" data-item="${i.id}">Reclamar</button></div>`).join('')
+  const disp = (d.items || []).filter(i => i.estado_efectivo === 'disponible');
+  const cupones = (d.items || []).filter(i => i.estado_efectivo === 'cupon');
+  const dispHtml = disp.map(i => `<div class="ped-row"><span class="cod">${esc(i.etiqueta)}</span><button class="btn-claim" data-item="${esc(i.id)}">Canjear</button></div>`).join('');
+  const cuponesHtml = cupones.map(cuponRowHtml).join('');
+  const itemsHtml = (disp.length || cupones.length)
+    ? dispHtml + cuponesHtml
     : '<p style="color:var(--muted);font-size:14px;padding:10px 0">Todavía no tenés premios. Girá la ruleta para ganar.</p>';
-  const canjHtml = canj.length ? `<div style="font-size:11px;color:var(--muted);margin-top:8px">Ya reclamados: ${canj.map(i => esc(ITEM_LBL[i.tipo_item] || i.tipo_item)).join(', ')}</div>` : '';
   const peds = (d.pedidos || []).length
     ? d.pedidos.map(p => {
         const pagado = p.estado_pago === 'pagado';
@@ -110,9 +116,8 @@ function vistaPerfil(d) {
       <div class="saldo-card"><div class="num" style="font-size:28px">${esc(pos)}</div><div class="lbl">puesto semanal</div></div>
     </div>
 
-    <div class="section-header"><span class="section-label">MIS <span>ITEMS</span></span></div>
+    <div class="section-header"><span class="section-label">MIS <span>CUPONES</span></span></div>
     ${itemsHtml}
-    ${canjHtml}
 
     <div class="section-header"><span class="section-label">TUS <span>PEDIDOS</span></span></div>
     ${peds}
@@ -124,19 +129,47 @@ function vistaPerfil(d) {
     <button class="btn-salir" id="g-logout">Cerrar sesión</button>`;
   document.getElementById('g-logout').addEventListener('click', () => window.CHKAuth.signOut());
 
-  // Reclamar items (premios de la ruleta).
+  // Canjear premio → genera el código de cupón y lo muestra en el acto.
   out.querySelectorAll('.btn-claim').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true; b.textContent = '...';
     try {
       const token = await window.CHKAuth.getToken();
       const r = await fetch('/api/app/reclamar-item', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ id: Number(b.dataset.item) }),
+        body: JSON.stringify({ id: b.dataset.item }),
       }).then((res) => res.json().then((j) => ({ ok: res.ok, j })));
-      if (r.ok) { b.textContent = '✓ reclamado'; b.classList.add('claimed'); CHK.toast('¡Listo! Escribinos por Instagram (@chunkysnkrs.uy) para coordinar la entrega.'); }
-      else { b.disabled = false; b.textContent = 'Reclamar'; CHK.toast(r.j.error || 'No se pudo reclamar.'); }
-    } catch { b.disabled = false; b.textContent = 'Reclamar'; }
+      if (r.ok && r.j.codigo) {
+        const row = b.closest('.ped-row');
+        row.outerHTML = cuponRowHtml({ etiqueta: r.j.etiqueta, codigo: r.j.codigo, expira_en: r.j.expira_en });
+        wireCopiar();
+        CHK.toast('¡Canjeado! Tu código: ' + r.j.codigo);
+      } else { b.disabled = false; b.textContent = 'Canjear'; CHK.toast(r.j.error || 'No se pudo canjear.'); }
+    } catch { b.disabled = false; b.textContent = 'Canjear'; }
   }));
+  wireCopiar();
+}
+
+// Fila de un cupón ya canjeado (código + vencimiento + copiar).
+function cuponRowHtml(i) {
+  const vence = i.expira_en ? new Date(i.expira_en).toLocaleDateString('es-UY') : '';
+  return `<div class="cupon-row">
+    <div class="cupon-info">
+      <span class="cod">${esc(i.etiqueta)}</span>
+      <div class="cupon-cod">${esc(i.codigo)}</div>
+      <div class="cupon-vence">Válido hasta ${esc(vence)} · pegalo en el carrito</div>
+    </div>
+    <button class="btn-copiar" data-cod="${esc(i.codigo)}">Copiar</button>
+  </div>`;
+}
+function wireCopiar() {
+  document.querySelectorAll('.btn-copiar').forEach((b) => {
+    if (b._w) return; b._w = 1;
+    b.addEventListener('click', () => {
+      const cod = b.dataset.cod;
+      if (navigator.clipboard) navigator.clipboard.writeText(cod).then(() => CHK.toast('Código copiado: ' + cod)).catch(() => CHK.toast('Copiá: ' + cod));
+      else CHK.toast('Copiá: ' + cod);
+    });
+  });
 }
 
 (async () => {

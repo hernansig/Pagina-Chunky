@@ -98,6 +98,12 @@ export default async function handler(req, res) {
         }
       }
 
+      // Finalizar el cupón usado (por si una carrera lo dejó suelto): queda usado.
+      if (pedido.cupon_codigo) {
+        await sb.from('items_usuario').update({ usado_en: new Date().toISOString() })
+          .eq('codigo', pedido.cupon_codigo).is('usado_en', null);
+      }
+
       // Marcar reservas (24h) activas de esos productos como convertidas.
       for (const item of pedido.productos || []) {
         await sb.from('reservas')
@@ -127,6 +133,8 @@ export default async function handler(req, res) {
         .eq('id', pedido.id).eq('stock_reservado', true).select('id');
       if (claim && claim.length) {
         await devolverStock(sb, pedido.productos);
+        // el cupón vuelve a quedar disponible para el usuario
+        if (pedido.cupon_codigo) await sb.from('items_usuario').update({ usado_en: null }).eq('codigo', pedido.cupon_codigo);
       } else {
         // sin reserva que soltar; marcar rechazado solo si seguía pendiente
         await sb.from('pedidos')
@@ -158,6 +166,11 @@ async function notificarPagoConfirmado(pedido) {
   const lista = (pedido.productos || [])
     .map((p) => `${p.nombre}${p.variante ? ` (${p.variante})` : p.talle ? ` (T ${p.talle})` : ''} × ${p.cantidad || 1}`)
     .join('<br>');
+  // Desglose de envío/descuento (cupón).
+  const envio = Number(pedido.envio || 0), desc = Number(pedido.descuento || 0);
+  const desglose =
+    `${desc > 0 ? `<b>Descuento:</b> -$${desc}${pedido.cupon_codigo ? ` (cupón ${pedido.cupon_codigo})` : ''}<br>` : ''}` +
+    `<b>Envío:</b> ${envio > 0 ? '$' + envio : 'GRATIS' + (pedido.cupon_codigo ? ` (cupón ${pedido.cupon_codigo})` : '')}<br>`;
 
   // Cliente
   if (pedido.cliente_contacto) {
@@ -169,7 +182,9 @@ async function notificarPagoConfirmado(pedido) {
         cuerpoHtml: `
           Recibimos tu pago. Tu pedido está en preparación.<br><br>
           <b>Código:</b> ${pedido.codigo_publico}<br>
-          <b>Productos:</b><br>${lista}<br><br>
+          <b>Productos:</b><br>${lista}<br>
+          ${desglose}
+          <b>Total:</b> $${pedido.monto_total}<br><br>
           Envío estimado: 3 a 4 días hábiles. Podés seguir el estado con tu código.`,
         cta: { texto: 'Ver mi pedido', url: `${site}/pedido/${pedido.codigo_publico}` },
       }),
@@ -189,8 +204,9 @@ async function notificarPagoConfirmado(pedido) {
       cuerpoHtml: `
         <b>Código:</b> ${pedido.codigo_publico}<br>
         <b>Cliente:</b> ${pedido.cliente_nombre || '—'} (${pedido.cliente_contacto || '—'})<br>
-        <b>Total:</b> $${pedido.monto_total}<br>
-        <b>Productos:</b><br>${lista}<br><br>
+        <b>Productos:</b><br>${lista}<br>
+        ${desglose}
+        <b>Total:</b> $${pedido.monto_total}<br><br>
         <b>Enviar a:</b><br>${dirHtml}`,
     }),
   });

@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import { supa } from '../../lib/supabase.js';
 import { json, fail, readBody } from '../../lib/http.js';
 import { usuarioDeReq, getAuthUser } from '../../lib/usuario.js';
-import { avisarDueno, plantilla } from '../../lib/mail.js';
 import { tokenAleatorio } from '../../lib/util.js';
 import { permitido, ipDe } from '../../lib/ratelimit.js';
 import { verificarTurnstile } from '../../lib/captcha.js';
@@ -23,6 +22,7 @@ export default async function handler(req, res) {
       case 'comprar-vida':    return await comprarVida(req, res);
       case 'mis-items':       return await misItems(req, res);
       case 'reclamar-item':   return await reclamarItem(req, res);
+      case 'validar-cupon':   return await validarCupon(req, res);
       default:                return fail(res, 404, 'Acción desconocida.');
     }
   } catch (err) {
@@ -71,9 +71,10 @@ async function perfil(req, res) {
 
   const { posicion, mejor } = await posicionUsuario(sb, u.id, desde);
 
-  const { data: items } = await sb.from('items_usuario')
-    .select('id,tipo_item,estado,obtenido_en,canjeado_en')
+  const { data: itemsRaw } = await sb.from('items_usuario')
+    .select(ITEM_COLS)
     .eq('usuario_id', u.id).order('obtenido_en', { ascending: false }).limit(50);
+  const items = (itemsRaw || []).map(decorarItem);
 
   // Pedidos del usuario: por usuario_id o por email. Se hacen dos consultas
   // con filtros parametrizados (.eq) y se fusionan, en vez de interpolar el
@@ -218,16 +219,18 @@ async function comprarVida(req, res) {
   json(res, 200, { ok: true, costo: VIDA_COSTO, puntos_disponibles: cur?.puntos_disponibles ?? 0 });
 }
 
-// ── Mis items (canjeables) ──────────────────────────────────────
+// ── Mis items / cupones ─────────────────────────────────────────
+const ITEM_COLS = 'id,tipo_item,estado,codigo,obtenido_en,canjeado_en,expira_en,usado_en';
 async function misItems(req, res) {
   const u = await usuarioDeReq(req);
   if (!u) return fail(res, 401, 'No autenticado.');
   const { data } = await supa().from('items_usuario')
-    .select('id,tipo_item,estado,obtenido_en,canjeado_en')
-    .eq('usuario_id', u.id).order('obtenido_en', { ascending: false }).limit(60);
-  json(res, 200, { ok: true, items: data || [] });
+    .select(ITEM_COLS).eq('usuario_id', u.id).order('obtenido_en', { ascending: false }).limit(60);
+  json(res, 200, { ok: true, items: (data || []).map(decorarItem) });
 }
 
+// Canjear un premio ganado → genera el CÓDIGO de cupón (válido 10 días) que se
+// pega en el carrito. Idempotente ante doble-click (devuelve el código existente).
 async function reclamarItem(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
   const u = await usuarioDeReq(req);
@@ -236,26 +239,95 @@ async function reclamarItem(req, res) {
   if (!id) return fail(res, 400, 'Falta el item.');
   const sb = supa();
   const { data: it } = await sb.from('items_usuario')
-    .select('id,estado,tipo_item').eq('id', id).eq('usuario_id', u.id).maybeSingle();
+    .select('id,estado,tipo_item,codigo,expira_en,obtenido_en').eq('id', id).eq('usuario_id', u.id).maybeSingle();
   if (!it) return fail(res, 404, 'Item no encontrado.');
-  if (it.estado === 'canjeado') return fail(res, 409, 'Ese premio ya fue reclamado.');
-  await sb.from('items_usuario').update({ estado: 'canjeado', canjeado_en: new Date().toISOString() }).eq('id', id);
-  avisarReclamo(u, it.tipo_item).catch((e) => console.error('[reclamo mail]', e.message));
-  json(res, 200, { ok: true });
+  const info = CUPON_INFO[it.tipo_item] || { etiqueta: it.tipo_item };
+
+  if (it.estado === 'canjeado') {
+    if (!it.codigo) return fail(res, 409, 'Ese premio ya fue canjeado.');
+    return json(res, 200, { ok: true, codigo: it.codigo, tipo_item: it.tipo_item, etiqueta: info.etiqueta, expira_en: it.expira_en });
+  }
+  if (new Date(it.obtenido_en) < semanaDesde()) {
+    return fail(res, 410, 'Ese premio venció. Los premios sin canjear se renuevan cada semana.');
+  }
+
+  const codigo = generarCupon();
+  const ahora = new Date();
+  const expira = new Date(ahora.getTime() + CUPON_DIAS * 86400000);
+  const { data: claim } = await sb.from('items_usuario')
+    .update({ estado: 'canjeado', canjeado_en: ahora.toISOString(), codigo, expira_en: expira.toISOString() })
+    .eq('id', id).eq('estado', 'disponible').select('id');   // claim atómico: no doble-canje
+  if (!claim || !claim.length) {
+    const { data: ya } = await sb.from('items_usuario').select('codigo,tipo_item,expira_en').eq('id', id).maybeSingle();
+    if (ya && ya.codigo) return json(res, 200, { ok: true, codigo: ya.codigo, tipo_item: ya.tipo_item, etiqueta: (CUPON_INFO[ya.tipo_item] || {}).etiqueta, expira_en: ya.expira_en });
+    return fail(res, 409, 'No se pudo canjear.');
+  }
+  json(res, 200, { ok: true, codigo, tipo_item: it.tipo_item, etiqueta: info.etiqueta, expira_en: expira.toISOString() });
 }
 
-// ── Ruleta — 100% server-side (crypto), límites y items ─────────
-const WHEEL = ['nada', 'otro_giro', 'llavero_chunky', 'nada', 'otro_giro', 'envio_gratis', 'nada', 'llavero_chunky', 'otro_giro', 'chunky_bag'];
-const PESOS = { nada: 35, otro_giro: 30, llavero_chunky: 18, envio_gratis: 12, chunky_bag: 5 };
-const ITEM_TIPOS = ['envio_gratis', 'chunky_bag', 'llavero_chunky'];
+// Valida un código de cupón (anónimo: el código es el "portador"). Lo usa el
+// carrito para mostrar el descuento antes de pagar. NO lo marca usado.
+async function validarCupon(req, res) {
+  if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
+  const body = await readBody(req).catch(() => ({}));
+  const codigo = String(body.codigo || '').trim().toUpperCase().slice(0, 24);
+  if (!codigo) return fail(res, 400, 'Falta el código.');
+  const { data: it } = await supa().from('items_usuario')
+    .select('tipo_item,estado,usado_en,expira_en').eq('codigo', codigo).maybeSingle();
+  if (!it || it.estado !== 'canjeado') return fail(res, 404, 'Ese cupón no existe.');
+  if (it.usado_en) return fail(res, 409, 'Ese cupón ya se usó.');
+  if (it.expira_en && new Date(it.expira_en) < new Date()) return fail(res, 409, 'Ese cupón venció.');
+  const info = CUPON_INFO[it.tipo_item];
+  if (!info) return fail(res, 404, 'Cupón desconocido.');
+  json(res, 200, { ok: true, codigo, tipo: it.tipo_item, etiqueta: info.etiqueta, descuento: info.descuento, envio_gratis: info.envio_gratis });
+}
+
+// ── Ruleta — 100% server-side (crypto), límites y premios ───────
+// Los premios son CUPONES de descuento (ver db/add-cupones.sql). La rueda
+// tiene 10 secciones; el orden de WHEEL debe coincidir con ruleta.html.
+const WHEEL = ['nada', 'otro_giro', 'envio_gratis', 'nada', 'desc_200', 'otro_giro', 'nada', 'envio_gratis', 'otro_giro', 'desc_500'];
+const PESOS = { nada: 34, otro_giro: 30, envio_gratis: 18, desc_200: 13, desc_500: 5 };
+const ITEM_TIPOS = ['desc_200', 'desc_500', 'envio_gratis'];
 const ETIQUETAS = {
   nada: '¡Casi! Seguí girando',
   otro_giro: '¡Otro giro gratis!',
-  llavero_chunky: '¡Ganaste un Llavero Chunky!',
-  envio_gratis: '¡Envío gratis en tu próximo pedido!',
-  chunky_bag: '¡Ganaste una Chunky Bag!',
+  envio_gratis: '¡Ganaste ENVÍO GRATIS!',
+  desc_200: '¡Ganaste $200 OFF!',
+  desc_500: '¡Ganaste $500 OFF!',
 };
-const NOMBRE_ITEM = { envio_gratis: 'ENVÍO GRATIS en su próximo pedido', chunky_bag: 'una CHUNKY BAG', llavero_chunky: 'un LLAVERO CHUNKY' };
+// Efecto de cada cupón (descuento sobre productos y/o envío gratis).
+const CUPON_INFO = {
+  desc_200:     { etiqueta: '$200 OFF',     descuento: 200, envio_gratis: false },
+  desc_500:     { etiqueta: '$500 OFF',     descuento: 500, envio_gratis: false },
+  envio_gratis: { etiqueta: 'Envío gratis', descuento: 0,   envio_gratis: true },
+};
+const CUPON_DIAS = 10;   // vigencia del cupón una vez canjeado
+
+// Código legible y único para el cupón (mismo alfabeto sin ambiguos que los pedidos).
+function generarCupon() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const b = crypto.randomBytes(6);
+  let s = ''; for (let i = 0; i < 6; i++) s += A[b[i] % A.length];
+  return 'CHK-' + s;
+}
+// Clasifica un item para el frontend: 'disponible' (ganado, vigente esta semana),
+// 'cupon' (canjeado con código vigente), 'usado' o 'vencido'.
+function decorarItem(it) {
+  const now = Date.now(), week = semanaDesde().getTime();
+  const info = CUPON_INFO[it.tipo_item] || { etiqueta: it.tipo_item };
+  let ef;
+  if (it.estado === 'canjeado') {
+    if (it.usado_en) ef = 'usado';
+    else if (it.expira_en && new Date(it.expira_en).getTime() < now) ef = 'vencido';
+    else ef = 'cupon';
+  } else {
+    ef = (new Date(it.obtenido_en).getTime() >= week) ? 'disponible' : 'vencido';
+  }
+  return {
+    id: it.id, tipo_item: it.tipo_item, etiqueta: info.etiqueta, estado_efectivo: ef,
+    codigo: ef === 'cupon' ? it.codigo : null, expira_en: it.expira_en, obtenido_en: it.obtenido_en,
+  };
+}
 
 async function ruletaGirar(req, res) {
   if (req.method !== 'POST') return fail(res, 405, 'Método no permitido.');
@@ -263,9 +335,12 @@ async function ruletaGirar(req, res) {
   if (!u) return fail(res, 401, 'No autenticado.');
   const sb = supa();
 
-  // Límite de items guardados (máx 5 disponibles).
+  // Límite de premios guardados (máx 5 disponibles de ESTA semana; los de
+  // semanas anteriores ya vencieron y no cuentan).
   const { count: itemsDisp } = await sb.from('items_usuario')
-    .select('id', { count: 'exact', head: true }).eq('usuario_id', u.id).eq('estado', 'disponible');
+    .select('id', { count: 'exact', head: true })
+    .eq('usuario_id', u.id).eq('estado', 'disponible')
+    .gte('obtenido_en', semanaDesde().toISOString());
   if ((itemsDisp || 0) >= MAX_ITEMS) {
     return fail(res, 409, `Ya tenés el máximo de premios guardados (${MAX_ITEMS}). Canjeá alguno antes de seguir girando.`);
   }
@@ -301,9 +376,9 @@ async function ruletaGirar(req, res) {
     giros = g != null ? g : giros + 1;
     premio = 'otro_giro';
   } else if (ITEM_TIPOS.includes(resultado)) {
+    // Se guarda como item 'disponible' (cupón sin canjear). Vence al reiniciar la semana.
     await sb.from('items_usuario').insert({ usuario_id: u.id, tipo_item: resultado });
     premio = resultado;
-    avisarPremio(u, resultado).catch((e) => console.error('[ruleta mail]', e.message));
   }
 
   json(res, 200, {
@@ -311,31 +386,6 @@ async function ruletaGirar(req, res) {
     puntos_disponibles: pts, giros_gratis: giros,
     giros_restantes: Math.max(0, LIMITE_GIROS - semCount),
     items_disponibles: (itemsDisp || 0) + (ITEM_TIPOS.includes(resultado) ? 1 : 0),
-  });
-}
-
-async function avisarPremio(u, tipo) {
-  await avisarDueno({
-    subject: `RULETA — premio: ${tipo}`,
-    html: plantilla({
-      titulo: 'Premio de la ruleta',
-      cuerpoHtml: `<b>${u.nombre || u.alias || 'Un usuario'}</b> (${u.email}) ganó <b>${NOMBRE_ITEM[tipo] || tipo}</b> en la ruleta.<br><br>
-        Queda guardado como item disponible. Cuando lo reclame desde su perfil, coordinás la entrega por Instagram.`,
-    }),
-  });
-}
-async function avisarReclamo(u, tipo) {
-  const fecha = new Intl.DateTimeFormat('es-UY', {
-    dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Montevideo',
-  }).format(new Date());
-  await avisarDueno({
-    subject: `RECLAMO de premio: ${tipo}`,
-    html: plantilla({
-      titulo: 'Reclamo de premio',
-      cuerpoHtml: `<b>${u.nombre || u.alias || 'Un usuario'}</b> (${u.email}) reclamó <b>${NOMBRE_ITEM[tipo] || tipo}</b>.<br>
-        <b>Fecha del canje:</b> ${fecha} (hora Uruguay)<br><br>
-        Coordiná la entrega por Instagram (@chunkysnkrs.uy).`,
-    }),
   });
 }
 

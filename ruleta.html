@@ -44,7 +44,7 @@
 
       <div class="resultado" id="resultado"></div>
       <button class="btn big" id="girar" style="max-width:280px;margin:14px auto 0"><span>Girar (1700 pts)</span></button>
-      <p style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-top:14px">El descuento y el resultado se calculan en el servidor. Los premios los coordinamos por Instagram.</p>
+      <p style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-top:14px">El resultado se calcula en el servidor. Los cupones ganados se canjean desde tu perfil y se aplican en el carrito.</p>
     </div>
   </main>
 </div>
@@ -53,10 +53,10 @@
 <script>
 const COSTO = 1700;
 // Mismo orden que el backend (WHEEL en api/app/[action].js).
-const WHEEL = ['nada','otro_giro','llavero_chunky','nada','otro_giro','envio_gratis','nada','llavero_chunky','otro_giro','chunky_bag'];
-const LABELS = { nada:'CASI', otro_giro:'OTRO GIRO', llavero_chunky:'LLAVERO', envio_gratis:'ENVÍO GRATIS', chunky_bag:'CHUNKY BAG' };
-const COLORS = { nada:'#1a1010', otro_giro:'#5a0e0e', llavero_chunky:'#7a1414', envio_gratis:'#8b0000', chunky_bag:'#cc0000' };
-const PREMIOS = ['envio_gratis', 'chunky_bag', 'llavero_chunky'];
+const WHEEL = ['nada','otro_giro','envio_gratis','nada','desc_200','otro_giro','nada','envio_gratis','otro_giro','desc_500'];
+const LABELS = { nada:'CASI', otro_giro:'OTRO GIRO', envio_gratis:'ENVÍO GRATIS', desc_200:'$200 OFF', desc_500:'$500 OFF' };
+const COLORS = { nada:'#1a1010', otro_giro:'#5a0e0e', envio_gratis:'#8b0000', desc_200:'#a30f0f', desc_500:'#cc0000' };
+const PREMIOS = ['desc_200', 'desc_500', 'envio_gratis'];
 
 async function authReady() {
   for (let i = 0; i < 120 && !window.CHKAuth; i++) await new Promise(r => setTimeout(r, 50));
@@ -133,7 +133,7 @@ function setSaldo(pts, giros, restantes) {
       setTimeout(() => {
         const gano = PREMIOS.includes(d.resultado);
         res.className = 'resultado ' + (gano ? 'win' : d.resultado === 'otro_giro' ? 'spin' : 'none');
-        res.textContent = d.etiqueta + (gano ? ' — reclamalo en tu perfil' : '');
+        res.textContent = d.etiqueta + (gano ? ' — canjealo en tu perfil' : '');
         u.puntos_disponibles = d.puntos_disponibles; u.giros_gratis = d.giros_gratis;
         setSaldo(d.puntos_disponibles, d.giros_gratis, d.giros_restantes);
         if (window.CHKAuth) window.CHKAuth.me(true).then(() => window.CHKAuth.mountHeader());

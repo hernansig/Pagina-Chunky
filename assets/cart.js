@@ -11,6 +11,16 @@
 (function () {
   if (window.CHKCart) return;
   const KEY = 'chk_cart';
+  const CUPON_KEY = 'chk_cupon';
+  const ENVIO = 290;   // envío fijo a todo Uruguay (debe coincidir con crear-pago.js)
+
+  // Cupón aplicado (código + efecto), persistido para sobrevivir recargas.
+  function getCupon() {
+    try { const v = JSON.parse(localStorage.getItem(CUPON_KEY) || 'null'); return v && v.codigo ? v : null; } catch { return null; }
+  }
+  function setCupon(c) { try { localStorage.setItem(CUPON_KEY, JSON.stringify(c)); } catch {} }
+  function clearCupon() { try { localStorage.removeItem(CUPON_KEY); } catch {} }
+  const fmt = (n) => (window.CHK ? CHK.money(n) : '$' + n);
 
   function leer() {
     try {
@@ -72,6 +82,16 @@
       </div>
       <div class="cart-items"></div>
       <div class="cart-foot">
+        <div class="cart-cupon">
+          <input class="cart-cupon-input" placeholder="CÓDIGO DE CUPÓN" maxlength="24" autocomplete="off">
+          <button class="cart-cupon-btn" type="button">Aplicar</button>
+        </div>
+        <div class="cart-cupon-msg"></div>
+        <div class="cart-breakdown">
+          <div class="cb-row"><span>Subtotal</span><span class="cb-subtotal">$0</span></div>
+          <div class="cb-row cb-desc" style="display:none"><span>Descuento</span><span class="cb-descuento">-$0</span></div>
+          <div class="cb-row"><span>Envío</span><span class="cb-envio">$0</span></div>
+        </div>
         <div class="cart-total-row"><span>Total</span><span class="cart-total">$0</span></div>
         <button class="btn big cart-comprar"><span>Comprar</span></button>
         <div class="cart-form" style="display:none">
@@ -102,9 +122,57 @@
       drawer.querySelector('[data-f="email"]').focus();
     });
     drawer.querySelector('.cart-pagar').addEventListener('click', pagar);
+    drawer.querySelector('.cart-cupon-btn').addEventListener('click', aplicarCupon);
+    drawer.querySelector('.cart-cupon-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') aplicarCupon(); });
   }
 
   function esc(s = '') { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  // ── Cupón + desglose de totales ───────────────────────────
+  function renderTotals() {
+    if (!drawer) return;
+    const sub = total(), hayItems = count() > 0, cupon = getCupon();
+    let envio = hayItems ? ENVIO : 0, desc = 0;
+    if (cupon && hayItems) {
+      if (cupon.envio_gratis) envio = 0;
+      desc = Math.min(cupon.descuento || 0, sub);
+    }
+    const tot = Math.max(0, sub - desc) + envio;
+    drawer.querySelector('.cb-subtotal').textContent = fmt(sub);
+    drawer.querySelector('.cb-desc').style.display = desc > 0 ? '' : 'none';
+    drawer.querySelector('.cb-descuento').textContent = '-' + fmt(desc);
+    drawer.querySelector('.cb-envio').textContent = (cupon && cupon.envio_gratis && hayItems) ? 'GRATIS' : fmt(envio);
+    drawer.querySelector('.cart-total').textContent = fmt(tot);
+    const btn = drawer.querySelector('.cart-cupon-btn'), inp = drawer.querySelector('.cart-cupon-input');
+    btn.textContent = cupon ? 'Quitar' : 'Aplicar';
+    inp.disabled = !!cupon;
+    if (cupon) inp.value = cupon.codigo;
+  }
+
+  async function aplicarCupon() {
+    const inp = drawer.querySelector('.cart-cupon-input'), cmsg = drawer.querySelector('.cart-cupon-msg');
+    cmsg.className = 'cart-cupon-msg';
+    if (getCupon()) { clearCupon(); cmsg.textContent = ''; renderTotals(); return; }   // quitar
+    const codigo = (inp.value || '').trim().toUpperCase();
+    if (!codigo) return;
+    cmsg.textContent = 'Validando...';
+    try {
+      const r = await CHK.api('/api/app/validar-cupon', { method: 'POST', body: { codigo } });
+      setCupon({ codigo: r.codigo, tipo: r.tipo, descuento: r.descuento, envio_gratis: r.envio_gratis, etiqueta: r.etiqueta });
+      cmsg.textContent = '✓ ' + r.etiqueta + ' aplicado';
+      renderTotals();
+    } catch (e) { cmsg.className = 'cart-cupon-msg error'; cmsg.textContent = e.message; }
+  }
+
+  // Re-valida el cupón guardado al abrir (puede haber vencido o usado).
+  async function revalidarCupon() {
+    const c = getCupon(); if (!c) { renderTotals(); return; }
+    try {
+      const r = await CHK.api('/api/app/validar-cupon', { method: 'POST', body: { codigo: c.codigo } });
+      setCupon({ codigo: r.codigo, tipo: r.tipo, descuento: r.descuento, envio_gratis: r.envio_gratis, etiqueta: r.etiqueta });
+    } catch { clearCupon(); }
+    renderTotals();
+  }
 
   function renderItems() {
     const cont = drawer.querySelector('.cart-items');
@@ -143,13 +211,13 @@
         el.querySelector('.cart-item-x').addEventListener('click', () => remove(k));
       });
     }
-    drawer.querySelector('.cart-total').textContent = window.CHK ? CHK.money(total()) : '$' + total();
+    renderTotals();
     drawer.querySelector('.cart-comprar').style.display = lista.length ? '' : 'none';
     if (!lista.length) drawer.querySelector('.cart-form').style.display = 'none';
   }
 
   function open() {
-    montar(); renderItems();
+    montar(); renderItems(); revalidarCupon();
     overlay.classList.add('abierto');
     drawer.classList.add('abierto');
   }
@@ -176,6 +244,7 @@
       const body = {
         items: leer().map((l) => ({ producto_id: l.producto_id, variante_id: l.variante_id || null, cantidad: l.cantidad || 1 })),
         nombre: f('nombre'), email, direccion,
+        cupon: (getCupon() || {}).codigo || null,
       };
       const r = await CHK.api('/api/crear-pago', { method: 'POST', body });
       window.location.href = r.init_point;
@@ -191,8 +260,8 @@
     const btn = document.querySelector('.nav-cart');
     if (btn) btn.addEventListener('click', open);
     refreshBadge();
-    // pago confirmado → vaciar el carrito
-    if (location.pathname.replace(/\/$/, '') === '/pedido-confirmado') clear();
+    // pago confirmado → vaciar el carrito y el cupón usado
+    if (location.pathname.replace(/\/$/, '') === '/pedido-confirmado') { clear(); clearCupon(); }
     // sincronizar entre pestañas
     window.addEventListener('storage', (e) => { if (e.key === KEY) refreshBadge(); });
   }

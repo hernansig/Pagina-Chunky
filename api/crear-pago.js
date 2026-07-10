@@ -12,6 +12,7 @@ import { permitido, ipDe } from '../lib/ratelimit.js';
 // de MercadoPago. El pago se sigue confirmando SOLO por webhook; si el checkout
 // se abandona, el cron libera el stock reservado (reserva_vence_en).
 const RESERVA_MIN = 30;   // minutos que se retiene el stock esperando el pago
+const ENVIO_URUGUAY = 290;   // envío fijo a todo Uruguay (lo waivea el cupón envio_gratis)
 
 export default async function handler(req, res) {
   if (methodNotAllowed(req, res, 'POST')) return;
@@ -81,7 +82,7 @@ export default async function handler(req, res) {
 
     // Validar cada línea y armar los items del pedido.
     const itemsPedido = [];
-    let montoTotal = 0;
+    let subtotal = 0;
     for (const l of lineas) {
       const producto = porId[l.producto_id];
       if (!producto || !producto.activo) return fail(res, 404, 'Producto no disponible.');
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
         precio: Number(producto.precio),
         cantidad: l.cantidad,
       });
-      montoTotal += Number(producto.precio) * l.cantidad;
+      subtotal += Number(producto.precio) * l.cantidad;
     }
 
     // Reservar el stock AHORA (atómico, condicional). Si una línea se quedó
@@ -123,6 +124,29 @@ export default async function handler(req, res) {
       return fail(res, 409, `Se agotó ${etq} mientras comprabas. Probá de nuevo.`);
     }
 
+    // Cupón (opcional): se "reserva" de forma atómica marcándolo usado. El tipo
+    // y el descuento se derivan SIEMPRE server-side (nunca del cliente). No
+    // acumulable: uno solo por pedido. Si falla, se suelta el stock reservado.
+    const codigoCupon = (limpiar(body.cupon, 24) || '').toUpperCase() || null;
+    let descuento = 0, envio = ENVIO_URUGUAY;
+    if (codigoCupon) {
+      const nowISO = new Date().toISOString();
+      const { data: claim } = await sb.from('items_usuario')
+        .update({ usado_en: nowISO })
+        .eq('codigo', codigoCupon).eq('estado', 'canjeado').is('usado_en', null).gt('expira_en', nowISO)
+        .select('tipo_item');
+      if (!claim || !claim.length) {
+        await devolverStock(sb, reservadas);
+        return fail(res, 409, 'El cupón no es válido, ya se usó o venció.');
+      }
+      const tipo = claim[0].tipo_item;
+      if (tipo === 'desc_200') descuento = 200;
+      else if (tipo === 'desc_500') descuento = 500;
+      else if (tipo === 'envio_gratis') envio = 0;
+    }
+    descuento = Math.min(descuento, subtotal);
+    const montoTotal = (subtotal - descuento) + envio;
+
     const codigo = generarCodigoPedido();
     const venceEn = new Date(Date.now() + RESERVA_MIN * 60000).toISOString();
 
@@ -135,6 +159,7 @@ export default async function handler(req, res) {
         direccion_envio: direccion,
         productos: itemsPedido,
         monto_total: montoTotal,
+        envio, descuento, cupon_codigo: codigoCupon,
         estado_pago: 'pendiente',
         estado_envio: 'preparando',
         stock_reservado: true,
@@ -142,23 +167,26 @@ export default async function handler(req, res) {
       })
       .select('id,codigo_publico')
       .single();
-    if (e2) { await devolverStock(sb, reservadas); throw e2; }
+    if (e2) { await devolverStock(sb, reservadas); await liberarCupon(sb, codigoCupon); throw e2; }
+
+    // Items para MercadoPago: con descuento se colapsa a una línea "Productos"
+    // (MP no admite líneas negativas); el envío va como su propia línea.
+    const itemsMP = descuento > 0
+      ? [{ id: codigo, nombre: 'Productos Chunky Snkrs', precio: subtotal - descuento, cantidad: 1 }]
+      : itemsPedido.map((it) => ({
+          id: it.variante_id || it.producto_id,
+          nombre: it.variante ? `${it.nombre} (${it.variante})` : it.nombre,
+          precio: it.precio, cantidad: it.cantidad,
+        }));
+    if (envio > 0) itemsMP.push({ id: 'envio', nombre: 'Envío (Uruguay)', precio: envio, cantidad: 1 });
 
     let pref;
     try {
-      pref = await crearPreferencia({
-        items: itemsPedido.map((it) => ({
-          id: it.variante_id || it.producto_id,
-          nombre: it.variante ? `${it.nombre} (${it.variante})` : it.nombre,
-          precio: it.precio,
-          cantidad: it.cantidad,
-        })),
-        codigoPedido: codigo,
-        payerEmail: email,
-      });
+      pref = await crearPreferencia({ items: itemsMP, codigoPedido: codigo, payerEmail: email });
     } catch (e) {
-      // No se pudo generar la preferencia → soltar el stock y anular el pedido.
+      // No se pudo generar la preferencia → soltar stock + cupón y anular el pedido.
       await devolverStock(sb, reservadas);
+      await liberarCupon(sb, codigoCupon);
       await sb.from('pedidos').update({ estado_pago: 'rechazado', stock_reservado: false }).eq('id', pedido.id);
       throw e;
     }
@@ -178,4 +206,9 @@ async function devolverStock(sb, items) {
     if (it.variante_id) await sb.rpc('devolver_stock_variante', { p_variante_id: it.variante_id, p_cantidad: it.cantidad || 1 });
     else await sb.rpc('devolver_stock', { p_producto_id: it.producto_id, p_cantidad: it.cantidad || 1 });
   }
+}
+
+// Suelta un cupón reservado (checkout fallido): vuelve a quedar disponible.
+async function liberarCupon(sb, codigo) {
+  if (codigo) await sb.from('items_usuario').update({ usado_en: null }).eq('codigo', codigo);
 }
