@@ -38,6 +38,10 @@ create or replace function cobrar_giro_ruleta(
   p_usuario_id uuid, p_costo integer, p_limite integer, p_ref text
 ) returns table (ok boolean, motivo text, puntos integer, giros_gratis integer, giros_semana integer)
 language plpgsql as $$
+#variable_conflict use_column
+-- ↑ los nombres de la tabla de retorno (giros_gratis, giros_semana) coinciden
+--   con columnas de `usuarios`. Sin esto, "set giros_gratis = giros_gratis - 1"
+--   es ambiguo y rompe el giro GRATIS. use_column → ante duda, usa la columna.
 declare
   u record;
   v_sem integer;
