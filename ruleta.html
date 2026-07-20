@@ -87,12 +87,12 @@ let rot = 0, girando = false;
 
 function animarHacia(seccion) {
   const paso = 360 / WHEEL.length;
-  const centro = seccion * paso + paso / 2;            // ángulo del centro de la sección
+  const centro = seccion * paso + paso / 2;           
   const jitter = (Math.random() - 0.5) * (paso - 8);
   const desiredMod = ((360 - (centro % 360)) % 360 + jitter + 360) % 360;
   let base = rot - (rot % 360) + desiredMod;
   if (base <= rot) base += 360;
-  rot = base + 360 * 5;                                 // 5 vueltas extra
+  rot = base + 360 * 5;                                 
   document.getElementById('rueda').style.transform = `rotate(${rot}deg)`;
 }
 
