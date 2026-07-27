@@ -1,6 +1,6 @@
 /* ════════════════════════════════════════════════════════════════
    CHUNKY RUNNER (integrado) — guarda METROS (ranking) + banca monedas,
-   vía backend con la sesión Google. Ranking semanal por metros.
+   vía backend con la sesión Google. Ranking mensual por metros.
    ════════════════════════════════════════════════════════════════ */
 (function (CR) {
   'use strict';
@@ -68,7 +68,7 @@
       const { top, tu } = await fetch('/api/app/ranking', { headers }).then(r => r.json());
       let html = (top && top.length)
         ? top.map((r) => `<li><span>${r.pos}º ${esc(r.alias)}</span><span>${Number(r.metros).toLocaleString('es-UY')} m</span></li>`).join('')
-        : '<li class="empty">sin partidas esta semana</li>';
+        : '<li class="empty">sin partidas este mes</li>';
       if (tu) html += `<li class="tu"><span>${tu.pos}º vos</span><span>${Number(tu.metros).toLocaleString('es-UY')} m</span></li>`;
       el.innerHTML = html;
     } catch {

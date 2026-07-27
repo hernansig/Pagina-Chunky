@@ -64,7 +64,7 @@
     </div>
 
     <section>
-      <div class="section-header"><span class="section-label">TOP <span>SEMANAL</span></span></div>
+      <div class="section-header"><span class="section-label">TOP <span>MENSUAL</span></span></div>
       <div id="ranking"><div class="cargando">cargando ranking...</div></div>
     </section>
   </main>
@@ -101,7 +101,7 @@ function esc(s = '') { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;',
           </div>
           <span class="pts">${Number(r.metros).toLocaleString('es-UY')} m</span>
         </div>`).join('')
-      : '<p style="color:var(--muted);font-size:14px;text-align:center;padding:10px">Todavía no hay partidas esta semana. ¡Sé el primero!</p>';
+      : '<p style="color:var(--muted);font-size:14px;text-align:center;padding:10px">Todavía no hay partidas este mes. ¡Sé el primero!</p>';
     if (tu) html += `<div class="rank-row" style="border-top:1px solid var(--bordo);margin-top:6px"><div class="who"><span class="pos">${tu.pos}º</span><span class="alias" style="color:#ffd35a">vos</span></div><span class="pts">${Number(tu.metros).toLocaleString('es-UY')} m</span></div>`;
     document.getElementById('ranking').innerHTML = html;
   } catch {

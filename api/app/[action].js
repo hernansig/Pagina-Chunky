@@ -67,7 +67,7 @@ async function perfil(req, res) {
   const u = await usuarioDeReq(req);
   if (!u) return fail(res, 401, 'No autenticado.');
   const sb = supa();
-  const desde = semanaDesde();
+  const desde = mesDesde();
 
   const { posicion, mejor } = await posicionUsuario(sb, u.id, desde);
 
@@ -96,12 +96,12 @@ async function perfil(req, res) {
   });
 }
 
-// ── Ranking semanal de METROS por partida ───────────────────────
+// ── Ranking mensual de METROS por partida ───────────────────────
 // Top 10 global (puede repetir jugador). Si el usuario logueado no está en
 // el top, se devuelve solo su mejor partida + su posición global.
 async function ranking(req, res) {
   const sb = supa();
-  const desde = semanaDesde();
+  const desde = mesDesde();
   const { data, error } = await sb.from('puntajes_mensuales')
     .select('usuario_id,alias,metros')
     .gte('creado_en', desde.toISOString())
@@ -197,9 +197,9 @@ async function guardarPuntaje(req, res) {
   json(res, 200, { ok: true, metros, monedas, en_ranking: enRanking, puntos_disponibles: saldo });
 }
 
-// Inserta el puntaje en el ranking SOLO si entra en el top 10 de la semana.
+// Inserta el puntaje en el ranking SOLO si entra en el top 10 del mes.
 async function guardarSiTop10(sb, u, metros, monedas) {
-  const desde = semanaDesde();
+  const desde = mesDesde();
   const { data: top } = await sb.from('puntajes_mensuales')
     .select('metros').gte('creado_en', desde.toISOString())
     .order('metros', { ascending: false }).limit(10);
@@ -211,9 +211,9 @@ async function guardarSiTop10(sb, u, metros, monedas) {
   return true;
 }
 
-// Conserva solo las 10 mejores partidas (por metros) del usuario en la semana.
+// Conserva solo las 10 mejores partidas (por metros) del usuario en el mes.
 async function prunearPartidas(sb, usuarioId) {
-  const desde = semanaDesde();
+  const desde = mesDesde();
   const { data: rows } = await sb.from('puntajes_mensuales')
     .select('id,metros').eq('usuario_id', usuarioId)
     .gte('creado_en', desde.toISOString()).order('metros', { ascending: false });
@@ -417,18 +417,26 @@ function clampInt(v, min, max) {
   if (!isFinite(n)) return min;
   return Math.max(min, Math.min(max, n));
 }
+// Ventanas de reinicio en hora de Uruguay (UTC-3 fijo, sin horario de verano),
+// devueltas en UTC real. El servidor (Vercel) corre en UTC; sin el offset las
+// ventanas reiniciarían 3 h antes. "Ahora" como reloj de pared MVD = campos UTC.
+const OFFSET_MVD_MS = 3 * 60 * 60 * 1000;
+function ahoraMvd() { return new Date(Date.now() - OFFSET_MVD_MS); }
+
+// Día 1 del mes 00:00 MVD → ventana del RANKING del minijuego (reinicia mensual).
+function mesDesde() {
+  const m = ahoraMvd();
+  return new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), 1) + OFFSET_MVD_MS);
+}
+// Lunes 00:00 MVD → ventana de la RULETA (giros y cupones reinician semanal).
 function semanaDesde() {
-  // Lunes 00:00 de Uruguay (UTC-3 fijo, sin horario de verano), devuelto en UTC.
-  // El servidor (Vercel) corre en UTC; sin esto la semana reiniciaría 3 h antes.
-  const OFFSET_MS = 3 * 60 * 60 * 1000;
-  const mvd = new Date(Date.now() - OFFSET_MS);           // "ahora" como reloj de pared MVD (en campos UTC)
-  const dia = (mvd.getUTCDay() + 6) % 7;                  // 0 = lunes
-  const lunesWall = Date.UTC(mvd.getUTCFullYear(), mvd.getUTCMonth(), mvd.getUTCDate() - dia, 0, 0, 0, 0);
-  return new Date(lunesWall + OFFSET_MS);                 // ese instante, de vuelta en UTC real
+  const m = ahoraMvd();
+  const dia = (m.getUTCDay() + 6) % 7;                    // 0 = lunes
+  return new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate() - dia) + OFFSET_MVD_MS);
 }
 function semanaRef() { return semanaDesde().toISOString().slice(0, 10); }
 
-// Mejor partida (metros) del usuario en la semana + su posición global.
+// Mejor partida (metros) del usuario en el mes + su posición global.
 async function posicionUsuario(sb, usuarioId, desde) {
   const { data: mb } = await sb.from('puntajes_mensuales')
     .select('metros').eq('usuario_id', usuarioId).gte('creado_en', desde.toISOString())
